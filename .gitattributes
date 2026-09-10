@@ -1,0 +1,9 @@
+* text=auto
+
+*.tsproj text
+*.plcproj text
+*.TcPOU text
+*.TcDUT text
+*.TcGVL text
+*.TcTTO text
+*.TcVis text
