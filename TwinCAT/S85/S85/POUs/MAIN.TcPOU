@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="MAIN" Id="{4bca9e79-1877-4bca-8065-d77b30175a3b}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+    nCounter : UDINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[nCounter := nCounter + 1;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

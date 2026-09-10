@@ -6,21 +6,29 @@
 *.sln.docstates
 
 # Build output
-bin/
-obj/
-Debug/
-Release/
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
 
-# TwinCAT generated/cache files
+# TwinCAT generated / cache
+**/_Boot/
+**/_CompileInfo/
+**/_Libraries/
 _TwinCAT Boot/
 *.tpy
 *.tmc
 
-# Windows
-Thumbs.db
-Desktop.ini
+# TwinCAT user / temp
+*.~u
+*.tsproj.user
+*.plcproj.user
 
 # Temporary files
 *.tmp
 *.bak
 *.log
+
+# Windows
+Thumbs.db
+Desktop.ini
