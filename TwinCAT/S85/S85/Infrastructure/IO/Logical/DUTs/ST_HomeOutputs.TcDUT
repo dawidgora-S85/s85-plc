@@ -3,9 +3,8 @@
   <DUT Name="ST_HomeOutputs" Id="{d9d0aa6c-92c9-448e-8a2d-c05d1f979c07}">
     <Declaration><![CDATA[TYPE ST_HomeOutputs :
 STRUCT
-	bTestOutput : BOOl;
+    DummyRoom : ST_DummyRoomOutputs;
 END_STRUCT
-END_TYPE
-]]></Declaration>
+END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>

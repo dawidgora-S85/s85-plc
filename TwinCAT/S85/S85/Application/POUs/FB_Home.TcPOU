@@ -12,10 +12,14 @@ VAR_OUTPUT
 END_VAR
 
 VAR
+	fbDummyRoom : FB_DummyRoom;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[stOutputs.bTestOutput := stInputs.bTestInput;]]></ST>
+      <ST><![CDATA[fbDummyRoom(
+    stInputs := stInputs.DummyRoom,
+    stOutputs => stOutputs.DummyRoom
+);]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

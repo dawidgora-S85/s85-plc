@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_DummyRoomOutputs" Id="{f3357728-1656-4dd4-b87b-470cbc5a23f3}">
+    <Declaration><![CDATA[TYPE ST_DummyRoomOutputs :
+STRUCT
+    bLight1 : BOOL;
+    bLight2 : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

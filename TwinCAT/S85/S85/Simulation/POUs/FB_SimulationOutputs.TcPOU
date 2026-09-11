@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SimulationOutputs" Id="{3d248788-7bff-4a98-ae89-9e57a1022234}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SimulationOutputs
+VAR_INPUT
+    stOutputs : ST_HomeOutputs;
+END_VAR
+
+VAR
+    bDummyRoomLight1Relay : BOOL;
+    bDummyRoomLight2Relay : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bDummyRoomLight1Relay := stOutputs.DummyRoom.bLight1;
+bDummyRoomLight2Relay := stOutputs.DummyRoom.bLight2;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SimulationInputs" Id="{6223e9b1-0276-4342-baa6-5cc6d95c7486}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SimulationInputs
+VAR_OUTPUT
+    stInputs : ST_HomeInputs;
+END_VAR
+
+VAR
+    bDummyRoomButton : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[stInputs.DummyRoom.bButton := bDummyRoomButton;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

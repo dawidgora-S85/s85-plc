@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Button" Id="{492468f6-1f6d-4d2e-9cf6-6a184fdac2a8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Button
+VAR_INPUT
+    bPressed    : BOOL;
+    tLongPress  : TIME := T#800MS;
+    tAutoCommit : TIME := T#1500MS;
+END_VAR
+
+VAR_OUTPUT
+    bShortPress : BOOL;
+    bLongPress  : BOOL;
+END_VAR
+
+VAR
+    fbLongTimer       : TON;
+    fbAutoCommitTimer : TON;
+    fbRelease         : F_TRIG;
+
+    bLongQualified : BOOL;
+    bCommitted     : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bShortPress := FALSE;
+bLongPress := FALSE;
+
+fbLongTimer(
+    IN := bPressed,
+    PT := tLongPress
+);
+
+fbAutoCommitTimer(
+    IN := bPressed,
+    PT := tAutoCommit
+);
+
+IF fbLongTimer.Q THEN
+    bLongQualified := TRUE;
+END_IF
+
+IF fbAutoCommitTimer.Q AND NOT bCommitted THEN
+    bLongPress := TRUE;
+    bCommitted := TRUE;
+END_IF
+
+fbRelease(CLK := bPressed);
+
+IF fbRelease.Q THEN
+    IF NOT bCommitted THEN
+        IF bLongQualified THEN
+            bLongPress := TRUE;
+        ELSE
+            bShortPress := TRUE;
+        END_IF
+    END_IF
+
+    bLongQualified := FALSE;
+    bCommitted := FALSE;
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

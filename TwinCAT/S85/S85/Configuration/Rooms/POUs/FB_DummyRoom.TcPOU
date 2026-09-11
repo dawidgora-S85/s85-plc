@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_DummyRoom" Id="{33979f5c-881e-401e-b0e7-434bc2e0e976}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_DummyRoom
+VAR_INPUT
+    stInputs : ST_DummyRoomInputs;
+END_VAR
+
+VAR_OUTPUT
+    stOutputs : ST_DummyRoomOutputs;
+END_VAR
+
+VAR
+    fbButton : FB_Button;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbButton(
+    bPressed := stInputs.bButton
+);
+
+IF fbButton.bShortPress THEN
+    IF stOutputs.bLight1 OR stOutputs.bLight2 THEN
+        stOutputs.bLight1 := FALSE;
+        stOutputs.bLight2 := FALSE;
+    ELSE
+        stOutputs.bLight1 := TRUE;
+    END_IF
+
+END_IF
+
+IF fbButton.bLongPress THEN
+    stOutputs.bLight2 := NOT stOutputs.bLight2;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

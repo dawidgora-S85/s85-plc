@@ -4,14 +4,24 @@
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
     fbHome : FB_Home;
-	
-	stInputs : ST_HomeInputs;
-	stOutputs : ST_HomeOutputs;
+    fbSimulationInputs : FB_SimulationInputs;
+    fbSimulationOutputs : FB_SimulationOutputs;
+
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbHome(
-	stInputs := stInputs,
-	stOutputs => stOutputs
+      <ST><![CDATA[fbSimulationInputs(
+    stInputs => stInputs
+);
+
+fbHome(
+    stInputs := stInputs,
+    stOutputs => stOutputs
+);
+
+fbSimulationOutputs(
+    stOutputs := stOutputs
 );]]></ST>
     </Implementation>
   </POU>
