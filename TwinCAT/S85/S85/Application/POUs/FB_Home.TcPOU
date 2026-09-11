@@ -2,11 +2,20 @@
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_Home" Id="{052f8c26-c1a2-4f4d-af1e-ff6466264bfd}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Home
+
+VAR_INPUT
+	stInputs : ST_HomeInputs;
+END_VAR
+
+VAR_OUTPUT
+	stOutputs : ST_HomeOutputs;
+END_VAR
+
 VAR
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[]]></ST>
+      <ST><![CDATA[stOutputs.bTestOutput := stInputs.bTestInput;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

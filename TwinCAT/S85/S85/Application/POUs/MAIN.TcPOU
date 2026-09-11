@@ -4,9 +4,15 @@
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
     fbHome : FB_Home;
+	
+	stInputs : ST_HomeInputs;
+	stOutputs : ST_HomeOutputs;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbHome();]]></ST>
+      <ST><![CDATA[fbHome(
+	stInputs := stInputs,
+	stOutputs => stOutputs
+);]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

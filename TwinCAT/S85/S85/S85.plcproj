@@ -24,6 +24,12 @@
     <Compile Include="Application\POUs\MAIN.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeInputs.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeOutputs.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
@@ -35,6 +41,8 @@
     <Folder Include="Infrastructure" />
     <Folder Include="Infrastructure\IO" />
     <Folder Include="Configuration" />
+    <Folder Include="Infrastructure\IO\Logical" />
+    <Folder Include="Infrastructure\IO\Logical\DUTs" />
     <Folder Include="Tests" />
     <Folder Include="Shared" />
     <Folder Include="Simulation" />

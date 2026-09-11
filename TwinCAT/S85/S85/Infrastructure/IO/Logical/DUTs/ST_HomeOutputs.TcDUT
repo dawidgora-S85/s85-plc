@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_HomeOutputs" Id="{d9d0aa6c-92c9-448e-8a2d-c05d1f979c07}">
+    <Declaration><![CDATA[TYPE ST_HomeOutputs :
+STRUCT
+	bTestOutput : BOOl;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
