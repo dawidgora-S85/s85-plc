@@ -3,10 +3,10 @@
   <POU Name="MAIN" Id="{4bca9e79-1877-4bca-8065-d77b30175a3b}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
-    nCounter : UDINT;
+    fbHome : FB_Home;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[nCounter := nCounter + 1;]]></ST>
+      <ST><![CDATA[fbHome();]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

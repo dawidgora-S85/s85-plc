@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Home" Id="{052f8c26-c1a2-4f4d-af1e-ff6466264bfd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Home
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
