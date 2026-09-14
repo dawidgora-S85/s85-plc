@@ -12,25 +12,30 @@ END_VAR
 
 VAR
     fbButton : FB_Button;
+	fbLight1 : FB_Light;
+	fbLight2 : FB_Light;
+	
+	bAnyLightOn : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbButton(
     bPressed := stInputs.bButton
 );
 
-IF fbButton.bShortPress THEN
-    IF stOutputs.bLight1 OR stOutputs.bLight2 THEN
-        stOutputs.bLight1 := FALSE;
-        stOutputs.bLight2 := FALSE;
-    ELSE
-        stOutputs.bLight1 := TRUE;
-    END_IF
+bAnyLightOn := fbLight1.bOn OR fbLight2.bOn;
 
-END_IF
+fbLight1(
+    bToggle := fbButton.bShortPress
+        AND (NOT bAnyLightOn OR fbLight1.bOn)
+);
 
-IF fbButton.bLongPress THEN
-    stOutputs.bLight2 := NOT stOutputs.bLight2;
-END_IF]]></ST>
+fbLight2(
+    bToggle := (fbButton.bShortPress AND fbLight2.bOn)
+        OR fbButton.bLongPress
+);
+
+stOutputs.bLight1 := fbLight1.bOn;
+stOutputs.bLight2 := fbLight2.bOn;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

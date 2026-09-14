@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Light" Id="{40bd1988-e0d2-44ea-a579-af0915fd1114}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Light
+VAR_INPUT
+	bToggle : BOOL;
+END_VAR
+VAR_OUTPUT
+	bOn : BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bToggle THEN
+	bOn := NOT bOn;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
