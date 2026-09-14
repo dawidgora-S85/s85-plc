@@ -1,9 +1,14 @@
 * text=auto
 
-*.tsproj text
+*.tsproj  text
 *.plcproj text
-*.TcPOU text
-*.TcDUT text
-*.TcGVL text
-*.TcTTO text
-*.TcVis text
+*.xti     text
+*.tpr     text
+
+*.TcPOU   text
+*.TcDUT   text
+*.TcGVL   text
+*.TcTTO   text
+*.TcVis   text
+*.TcVMO   text
+*.TcGTLO  text

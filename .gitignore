@@ -1,5 +1,6 @@
 # Visual Studio
-.vs/
+**/.vs/
+*.sln
 *.user
 *.suo
 *.userosscache
@@ -15,18 +16,36 @@
 **/_Boot/
 **/_CompileInfo/
 **/_Libraries/
+**/_ModuleInstall/
+**/_Deployment/
+**/_Repository/
+**/.TcGit/
+
 _TwinCAT Boot/
+
 *.tpy
 *.tmc
+*.tmcRefac
+*.compileinfo
+*.tclrs
+*.library
+*.compiled-library
+*.asm
+*.core
 
-# TwinCAT user / temp
+# Separate Line IDs
+LineIDs.dbg
+LineIDs.dbg.bak
+
+# TwinCAT user / temp / backup
 *.~u
+*.project.~u
 *.tsproj.user
 *.plcproj.user
 
-# Temporary files
-*.tmp
 *.bak
+*.orig
+*.tmp
 *.log
 
 # Windows
