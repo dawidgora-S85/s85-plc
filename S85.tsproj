@@ -1,10 +1,24 @@
 <?xml version="1.0"?>
 <TcSmProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2012/07/TcSmProject" TcSmVersion="1.0" TcVersion="3.1.4026.26">
-	<Project ProjectGUID="{7535CF7B-137C-41BC-96E2-9D8ECCCE3F0A}" Target64Bit="true" ShowHideConfigurations="#x3c7">
+	<Project ProjectGUID="{7535CF7B-137C-41BC-96E2-9D8ECCCE3F0A}" TargetNetId="5.180.201.239.1.1" Target64Bit="true" ShowHideConfigurations="#x3c7">
 		<System>
-			<Settings MaxCpus="8" NonWinCpus="1">
-				<Cpu CpuId="7"/>
+			<Settings MaxCpus="4">
+				<Cpu CpuId="3"/>
 			</Settings>
+			<Licenses>
+				<Target BkhfOrder="01942722">
+					<ManualSelect>{A1AF8A04-C08D-4853-A5A0-0E6C3A278A8C}</ManualSelect>
+					<ManualSelect>{14DB2856-1BFD-49EE-AEAB-78906DBFBEE2}</ManualSelect>
+					<ManualSelect>{6952449D-F68C-49A2-ADE4-8639D85B33A4}</ManualSelect>
+					<ManualSelect>{0ABFD2B0-EAE1-4DC7-AABE-03093B0786B7}</ManualSelect>
+					<TargetSelect TargetId="2">{A1AF8A04-C08D-4853-A5A0-0E6C3A278A8C}</TargetSelect>
+					<TargetSelect TargetId="2">{14DB2856-1BFD-49EE-AEAB-78906DBFBEE2}</TargetSelect>
+					<TargetSelect TargetId="2">{66689887-CCBD-452C-AC9A-039D997C6E66}</TargetSelect>
+					<TargetSelect TargetId="2">{6952449D-F68C-49A2-ADE4-8639D85B33A4}</TargetSelect>
+					<TargetSelect TargetId="2">{0ABFD2B0-EAE1-4DC7-AABE-03093B0786B7}</TargetSelect>
+					<LicenseDevice DongleHardwareId="2" DongleDevice="#x03020002" DongleLevel="30" DongleSystemId="{BCD0342F-0270-8541-3D3A-7BBD9990F816}" DongleSerialNumber="000bu4v4" DongleCacheLicense="false"/>
+				</Target>
+			</Licenses>
 			<Tasks>
 				<Task Id="3" Priority="20" CycleTime="100000" AmsPort="350" AdtTasks="true">
 					<Name>PlcTask</Name>
@@ -13,7 +27,7 @@
 		</System>
 		<Plc>
 			<Project GUID="{846DEC26-C073-4019-A3B8-1A7C3374AE79}" Name="S85" PrjFilePath="S85\S85.plcproj" TmcFilePath="S85\S85.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{30CE1C8F-1C2A-F9B8-04DF-C4B901EC65C5}" TmcPath="S85\S85.tmc">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{5C89BFD7-DE1A-86FF-A9D9-E54D0DDEEA05}" TmcPath="S85\S85.tmc">
 					<Name>S85 Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Contexts>
@@ -34,5 +48,8 @@
 				</Instance>
 			</Project>
 		</Plc>
+		<Io>
+			<Device File="Device 1 (EtherCAT).xti" Id="1"/>
+		</Io>
 	</Project>
 </TcSmProject>
