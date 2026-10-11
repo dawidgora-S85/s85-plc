@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <GVL Name="GVL_BeckhoffIO" Id="{9dbe3bca-c820-4c58-b452-4f0928e0acb4}">
-    <Declaration><![CDATA[{IF defined (S85_HW)}
-VAR_GLOBAL
+    <Declaration><![CDATA[VAR_GLOBAL
+{IF defined (S85_HW)}
     bWorkshopMainButton AT %I* : BOOL;
     bWorkshopMainLightRelay AT %Q* : BOOL;
-END_VAR
-{END_IF}]]></Declaration>
+{END_IF}
+END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>
