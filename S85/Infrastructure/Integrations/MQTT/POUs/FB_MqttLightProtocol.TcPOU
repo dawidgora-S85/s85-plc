@@ -112,7 +112,7 @@ ELSE
                 bHaBirth := TRUE;
             ELSE
                 FOR nIndex := 1 TO nCount DO
-                    IF (nReceivedTopicSize = LEN(aEntities[nIndex].sCommandTopic)) AND (sReceivedTopic = aEntities[nIndex].sCommandTopic) THEN
+                    IF (nReceivedTopicSize = LEN2(ADR(aEntities[nIndex].sCommandTopic))) AND (sReceivedTopic = aEntities[nIndex].sCommandTopic) THEN
                         nHandle := aEntities[nIndex].nHandle;
                         IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
                             IF (nReceivedPayloadSize = 2) AND (sReceivedPayload = 'ON') THEN
@@ -193,6 +193,9 @@ END_IF]]></ST></Implementation>
 VAR_IN_OUT
     stInputs : ST_HomeInputs;
 END_VAR
+VAR_IN_OUT CONSTANT
+    aCommandEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+END_VAR
 VAR_INPUT
     bAllowed : BOOL;
 END_VAR
@@ -207,7 +210,7 @@ END_FOR
  nCount := nEntityCount;
  IF nCount > GVL_HomeLimits.cMaxLights THEN nCount := GVL_HomeLimits.cMaxLights; END_IF
  FOR nIndex := 1 TO nCount DO
-    nHandle := aEntities[nIndex].nHandle;
+    nHandle := aCommandEntities[nIndex].nHandle;
      IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
          IF aPendingCommands[nHandle].bValid THEN
              IF bAllowed AND bConnected AND bSubscriptionsReady AND NOT bForceReset THEN

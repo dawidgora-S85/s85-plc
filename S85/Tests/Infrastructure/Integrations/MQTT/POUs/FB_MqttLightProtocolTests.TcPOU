@@ -24,13 +24,13 @@ aEntities[1].sCommandTopic := 'ha/lamp-one/set';
 aEntities[2].nHandle := 2;
 aEntities[2].sCommandTopic := 'ha/lamp-two/set';
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'ha/lamp-two/set', nReceivedTopicSize := 15, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertTrue(Condition := stInputs.aLightCommands[2].bValid AND stInputs.aLightCommands[2].bOn, Message := 'Second topic controls handle 2, not handle 1');
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Other handle is not commanded');
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[2].bValid, Message := 'Consumed command is not replayed next scan');
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'ha/lamp-two/set', nReceivedTopicSize := 15, sReceivedPayload := 'OFF', nReceivedPayloadSize := 3);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertTrue(Condition := stInputs.aLightCommands[2].bValid AND NOT stInputs.aLightCommands[2].bOn, Message := 'Repeated absolute OFF remains OFF');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
@@ -108,7 +108,7 @@ aEntities[1].nHandle := 1;
 aEntities[1].sCommandTopic := 'one/set';
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 7, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
 fbProtocol(bConnected := FALSE, bSubscriptionsReady := FALSE, nEntityCount := 1, aEntities := aEntities);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Disconnected pending command is cleared rather than replayed');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
@@ -123,12 +123,12 @@ END_VAR]]></Declaration>
 aEntities[1].nHandle := 0;
 aEntities[1].sCommandTopic := 'zero/set';
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'zero/set', nReceivedTopicSize := 8, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := FALSE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := FALSE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Zero handle is rejected even when commands are disabled');
 aEntities[1].nHandle := GVL_HomeLimits.cMaxLights + 1;
 aEntities[1].sCommandTopic := 'over/set';
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'over/set', nReceivedTopicSize := 8, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Out-of-range handle is rejected without array access');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
@@ -143,16 +143,16 @@ END_VAR]]></Declaration>
 aEntities[1].nHandle := 1;
 aEntities[1].sCommandTopic := 'one/set';
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'other/set', nReceivedTopicSize := 9, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Unknown command topic must be ignored');
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 7, sReceivedPayload := 'on', nReceivedPayloadSize := 2);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Lowercase payload must be ignored');
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 7, sReceivedPayload := 'ON ', nReceivedPayloadSize := 3);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Extra payload byte must be ignored');
 fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 8, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
-fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, aCommandEntities := aEntities, bAllowed := TRUE);
 AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Mismatched topic byte count must be ignored');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
