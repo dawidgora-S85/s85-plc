@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_BeckhoffOutputs" Id="{c017b568-1600-43eb-b871-66393886b64f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_BeckhoffOutputs
+VAR_INPUT
+    stOutputs : ST_HomeOutputs;
+END_VAR
+
+VAR
+    nMainHandle : UINT := 0;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[{IF defined (S85_HW)}
+GVL_BeckhoffIO.bWorkshopMainLightRelay := FALSE;
+IF nMainHandle >= 1 AND nMainHandle <= GVL_HomeLimits.cMaxLights THEN
+    IF stOutputs.aLights[nMainHandle].bValid THEN
+        GVL_BeckhoffIO.bWorkshopMainLightRelay := stOutputs.aLights[nMainHandle].bOn;
+    END_IF
+END_IF
+{END_IF}]]></ST>
+    </Implementation>
+    <Method Name="BindCatalog" Id="{f8575d03-c1c1-4867-9bb2-f7f21cfc78ad}">
+      <Declaration><![CDATA[METHOD PUBLIC BindCatalog : BOOL
+VAR_IN_OUT
+    fbCatalog : FB_LightCatalog;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nMainHandle := fbCatalog.FindLight(
+    sLocationCode := GVL_WorkshopConfig.stMainLight.sLocationCode,
+    sId := GVL_WorkshopConfig.stMainLight.sId
+);
+BindCatalog := nMainHandle <> 0;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

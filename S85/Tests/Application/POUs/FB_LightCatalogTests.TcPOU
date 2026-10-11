@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_LightCatalogTests" Id="{ec706122-379d-47bc-a219-1a88691114c0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LightCatalogTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[FirstRegistrationAndLookup();
+DuplicateIsRejected();
+InvalidDefinitionIsRejected();
+CapacityAndSealFailureAreRejected();
+IdentityUsesLocationAndIdNotHandleOrder();]]></ST></Implementation>
+    <Method Name="FirstRegistrationAndLookup" Id="{14a75115-f2a3-47ab-aa5b-e54bbb9643a1}">
+      <Declaration><![CDATA[METHOD PRIVATE FirstRegistrationAndLookup
+VAR
+    fbCatalog : FB_LightCatalog;
+    stDefinition : ST_LightDefinition;
+    stFound : ST_LightDefinition;
+    nHandle : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('First registration and lookup');
+fbCatalog.BeginRegistration();
+stDefinition.sLocationCode := 'H-L1-09';
+stDefinition.sLocationSlug := 'workshop';
+stDefinition.sLocationName := 'Workshop';
+stDefinition.sId := 'main';
+stDefinition.sName := 'Main light';
+stDefinition.nButtonIndex := 1;
+nHandle := fbCatalog.RegisterLight(stDefinition := stDefinition);
+AssertTrue(Condition := nHandle <> 0, Message := 'First registration should return a handle');
+AssertTrue(Condition := fbCatalog.Seal(), Message := 'Valid catalog should seal');
+AssertTrue(Condition := fbCatalog.FindLight(sLocationCode := 'H-L1-09', sId := 'main') = nHandle, Message := 'Lookup should return registered handle');
+AssertTrue(Condition := fbCatalog.GetDefinition(nHandle := nHandle, stDefinition => stFound), Message := 'Definition should be available after sealing');
+AssertTrue(Condition := stFound.sName = 'Main light', Message := 'Definition lookup should preserve metadata');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="DuplicateIsRejected" Id="{137a4d71-5b67-4b18-9549-d1f0355dd6e8}">
+      <Declaration><![CDATA[METHOD PRIVATE DuplicateIsRejected
+VAR
+    fbCatalog : FB_LightCatalog;
+    stDefinition : ST_LightDefinition;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Duplicate and conflicting metadata are rejected');
+fbCatalog.BeginRegistration();
+stDefinition.sLocationCode := 'H-L1-09'; stDefinition.sLocationSlug := 'workshop'; stDefinition.sLocationName := 'Workshop';
+stDefinition.sId := 'main'; stDefinition.sName := 'Main'; stDefinition.nButtonIndex := 1;
+fbCatalog.RegisterLight(stDefinition := stDefinition);
+AssertTrue(Condition := fbCatalog.RegisterLight(stDefinition := stDefinition) = 0, Message := 'Duplicate composite key should fail');
+AssertFalse(Condition := fbCatalog.Seal(), Message := 'Catalog with duplicate must not seal');
+fbCatalog.BeginRegistration();
+fbCatalog.RegisterLight(stDefinition := stDefinition);
+stDefinition.sId := 'side'; stDefinition.sLocationName := 'Other';
+AssertTrue(Condition := fbCatalog.RegisterLight(stDefinition := stDefinition) = 0, Message := 'Location metadata conflict should fail');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="InvalidDefinitionIsRejected" Id="{1025b587-05f4-40dc-9392-730ef0121e06}">
+      <Declaration><![CDATA[METHOD PRIVATE InvalidDefinitionIsRejected
+VAR
+    fbCatalog : FB_LightCatalog;
+    stDefinition : ST_LightDefinition;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Invalid identifier and button binding are rejected');
+fbCatalog.BeginRegistration();
+stDefinition.sLocationCode := 'H-L1-09'; stDefinition.sLocationSlug := 'workshop'; stDefinition.sLocationName := 'Workshop';
+stDefinition.sId := 'bad/id'; stDefinition.sName := 'Main'; stDefinition.nButtonIndex := 1;
+AssertTrue(Condition := fbCatalog.RegisterLight(stDefinition := stDefinition) = 0, Message := 'Identifier delimiter should be rejected');
+fbCatalog.BeginRegistration();
+stDefinition.sId := 'main'; stDefinition.nButtonIndex := GVL_HomeLimits.cMaxButtons + 1;
+AssertTrue(Condition := fbCatalog.RegisterLight(stDefinition := stDefinition) = 0, Message := 'Out-of-range button index should be rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="CapacityAndSealFailureAreRejected" Id="{eec0a76b-4515-4dc0-9f0c-9fb4c70158c8}">
+      <Declaration><![CDATA[METHOD PRIVATE CapacityAndSealFailureAreRejected
+VAR
+    fbCatalog : FB_LightCatalog;
+    stDefinition : ST_LightDefinition;
+    i : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Capacity and failed seal');
+fbCatalog.BeginRegistration();
+stDefinition.sLocationCode := 'H-L1-09'; stDefinition.sLocationSlug := 'workshop'; stDefinition.sLocationName := 'Workshop';
+stDefinition.sName := 'Light'; stDefinition.nButtonIndex := 1;
+FOR i := 1 TO GVL_HomeLimits.cMaxLights DO
+    stDefinition.sId := CONCAT('light-', UINT_TO_STRING(i));
+    AssertTrue(Condition := fbCatalog.RegisterLight(stDefinition := stDefinition) <> 0, Message := 'Definitions within capacity should fit');
+END_FOR
+stDefinition.sId := CONCAT('light-', UINT_TO_STRING(GVL_HomeLimits.cMaxLights + 1));
+AssertTrue(Condition := fbCatalog.RegisterLight(stDefinition := stDefinition) = 0, Message := 'Definition beyond capacity should be rejected');
+AssertFalse(Condition := fbCatalog.Seal(), Message := 'Capacity failure must prevent sealing');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="IdentityUsesLocationAndIdNotHandleOrder" Id="{cb5be05d-ac00-4c05-b71c-9d048f989d76}">
+      <Declaration><![CDATA[METHOD PRIVATE IdentityUsesLocationAndIdNotHandleOrder
+VAR
+    fbFirst : FB_LightCatalog;
+    fbSecond : FB_LightCatalog;
+    stDefinition : ST_LightDefinition;
+    nFirst : UINT;
+    nSecond : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Stable identity is independent of handle order');
+fbFirst.BeginRegistration(); fbSecond.BeginRegistration();
+stDefinition.sLocationCode := 'H-L1-09'; stDefinition.sLocationSlug := 'workshop'; stDefinition.sLocationName := 'Workshop';
+stDefinition.sName := 'Light'; stDefinition.nButtonIndex := 1;
+stDefinition.sId := 'main'; fbFirst.RegisterLight(stDefinition := stDefinition);
+stDefinition.sId := 'side'; fbFirst.RegisterLight(stDefinition := stDefinition);
+stDefinition.sId := 'side'; fbSecond.RegisterLight(stDefinition := stDefinition);
+stDefinition.sId := 'main'; fbSecond.RegisterLight(stDefinition := stDefinition);
+fbFirst.Seal(); fbSecond.Seal();
+nFirst := fbFirst.FindLight(sLocationCode := 'H-L1-09', sId := 'main');
+nSecond := fbSecond.FindLight(sLocationCode := 'H-L1-09', sId := 'main');
+AssertTrue(Condition := nFirst <> nSecond, Message := 'Registration order should change positional handle');
+AssertTrue(Condition := nFirst <> 0 AND nSecond <> 0, Message := 'Stable composite identity should resolve in either catalog');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

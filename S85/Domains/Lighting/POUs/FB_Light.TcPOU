@@ -4,15 +4,24 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Light
 VAR_INPUT
 	bToggle : BOOL;
+	bSetValid : BOOL;
+	bSetOn : BOOL;
 END_VAR
 VAR_OUTPUT
 	bOn : BOOL;
 END_VAR
+VAR
+	bPreviousToggle : BOOL;
+END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[IF bToggle THEN
+      <ST><![CDATA[IF bToggle AND NOT bPreviousToggle THEN
 	bOn := NOT bOn;
-END_IF]]></ST>
+ELSIF bSetValid THEN
+	bOn := bSetOn;
+END_IF
+
+bPreviousToggle := bToggle;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_LightCatalog" Id="{11092b8b-4cf4-4cb9-bcff-910ec6b2b29d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LightCatalog
+VAR
+    aDefinitions : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_LightDefinition;
+    nCount : UINT;
+    bReady : BOOL;
+    bError : BOOL;
+    nErrorCode : UINT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="BeginRegistration" Id="{3051e0de-f5c4-4ec2-a39e-03083bb530d0}">
+      <Declaration><![CDATA[METHOD PUBLIC BeginRegistration
+]]></Declaration>
+      <Implementation><ST><![CDATA[nCount := 0;
+bReady := FALSE;
+bError := FALSE;
+nErrorCode := 0;
+]]></ST></Implementation>
+    </Method>
+    <Method Name="RegisterLight" Id="{02724946-4a16-49ed-9776-bd5792cb8973}">
+      <Declaration><![CDATA[METHOD PUBLIC RegisterLight : UINT
+VAR_INPUT
+    stDefinition : ST_LightDefinition;
+END_VAR
+VAR
+    i : UINT;
+    nChar : UINT;
+    sChar : STRING(1);
+    bValidLocation : BOOL;
+    bValidSlug : BOOL;
+    bValidId : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[RegisterLight := 0;
+IF bReady OR bError THEN
+    bError := TRUE;
+    IF nErrorCode = 0 THEN nErrorCode := 1; END_IF
+    RETURN;
+END_IF
+IF nCount >= GVL_HomeLimits.cMaxLights THEN
+    bError := TRUE;
+    nErrorCode := 2;
+    RETURN;
+END_IF
+
+bValidLocation := LEN(stDefinition.sLocationCode) > 0;
+FOR nChar := 1 TO LEN(stDefinition.sLocationCode) DO
+    sChar := MID(stDefinition.sLocationCode, 1, nChar);
+    IF NOT ((sChar >= 'A' AND sChar <= 'Z') OR (sChar >= '0' AND sChar <= '9') OR sChar = '-') THEN
+        bValidLocation := FALSE;
+    END_IF
+END_FOR
+bValidSlug := LEN(stDefinition.sLocationSlug) > 0;
+FOR nChar := 1 TO LEN(stDefinition.sLocationSlug) DO
+    sChar := MID(stDefinition.sLocationSlug, 1, nChar);
+    IF NOT ((sChar >= 'a' AND sChar <= 'z') OR (sChar >= '0' AND sChar <= '9') OR sChar = '-') THEN
+        bValidSlug := FALSE;
+    END_IF
+END_FOR
+bValidId := LEN(stDefinition.sId) > 0;
+FOR nChar := 1 TO LEN(stDefinition.sId) DO
+    sChar := MID(stDefinition.sId, 1, nChar);
+    IF NOT ((sChar >= 'a' AND sChar <= 'z') OR (sChar >= '0' AND sChar <= '9') OR sChar = '_' OR sChar = '-') THEN
+        bValidId := FALSE;
+    END_IF
+END_FOR
+IF NOT bValidLocation OR NOT bValidSlug OR NOT bValidId OR LEN(stDefinition.sLocationName) = 0 OR LEN(stDefinition.sName) = 0 THEN
+    bError := TRUE;
+    nErrorCode := 3;
+    RETURN;
+END_IF
+IF stDefinition.nButtonIndex = 0 OR stDefinition.nButtonIndex > GVL_HomeLimits.cMaxButtons THEN
+    bError := TRUE;
+    nErrorCode := 4;
+    RETURN;
+END_IF
+
+FOR i := 1 TO nCount DO
+    IF aDefinitions[i].sLocationCode = stDefinition.sLocationCode THEN
+        IF aDefinitions[i].sLocationSlug <> stDefinition.sLocationSlug OR aDefinitions[i].sLocationName <> stDefinition.sLocationName THEN
+            bError := TRUE;
+            nErrorCode := 6;
+            RETURN;
+        END_IF
+        IF aDefinitions[i].sId = stDefinition.sId THEN
+            bError := TRUE;
+            nErrorCode := 5;
+            RETURN;
+        END_IF
+    END_IF
+    IF aDefinitions[i].sLocationSlug = stDefinition.sLocationSlug AND aDefinitions[i].sId = stDefinition.sId THEN
+        bError := TRUE;
+        nErrorCode := 7;
+        RETURN;
+    END_IF
+END_FOR
+nCount := nCount + 1;
+aDefinitions[nCount] := stDefinition;
+RegisterLight := nCount;]]></ST></Implementation>
+    </Method>
+    <Method Name="Seal" Id="{c9a61e5c-536d-4e7d-9a66-e7eb675529e4}">
+      <Declaration><![CDATA[METHOD PUBLIC Seal : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[Seal := FALSE;
+IF bError OR bReady THEN
+    RETURN;
+END_IF
+bReady := TRUE;
+Seal := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="FindLight" Id="{f4acdb0b-9778-4b4f-9d32-ec6ec5dcb24c}">
+      <Declaration><![CDATA[METHOD PUBLIC FindLight : UINT
+VAR_INPUT
+    sLocationCode : STRING(16);
+    sId : STRING(32);
+END_VAR
+VAR
+    i : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[FindLight := 0;
+IF NOT bReady THEN RETURN; END_IF
+FOR i := 1 TO nCount DO
+    IF aDefinitions[i].sLocationCode = sLocationCode AND aDefinitions[i].sId = sId THEN
+        FindLight := i;
+        RETURN;
+    END_IF
+END_FOR]]></ST></Implementation>
+    </Method>
+    <Method Name="GetDefinition" Id="{36595e2c-075b-4089-a2ba-49a5796e06ae}">
+      <Declaration><![CDATA[METHOD PUBLIC GetDefinition : BOOL
+VAR_INPUT
+    nHandle : UINT;
+END_VAR
+VAR_OUTPUT
+    stDefinition : ST_LightDefinition;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[GetDefinition := FALSE;
+stDefinition.sLocationCode := '';
+stDefinition.sLocationSlug := '';
+stDefinition.sLocationName := '';
+stDefinition.sId := '';
+stDefinition.sName := '';
+stDefinition.nButtonIndex := 0;
+IF NOT bReady OR nHandle = 0 OR nHandle > nCount THEN RETURN; END_IF
+stDefinition := aDefinitions[nHandle];
+GetDefinition := TRUE;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

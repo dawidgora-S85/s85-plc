@@ -1,28 +1,127 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="MAIN" Id="{4bca9e79-1877-4bca-8065-d77b30175a3b}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
     fbHome : FB_Home;
+    fbCatalog : FB_LightCatalog;
     fbSimulationInputs : FB_SimulationInputs;
     fbSimulationOutputs : FB_SimulationOutputs;
+    fbBeckhoffInputs : FB_BeckhoffInputs;
+    fbBeckhoffOutputs : FB_BeckhoffOutputs;
+    fbMqtt : FB_MqttIntegration;
 
     stInputs : ST_HomeInputs;
     stOutputs : ST_HomeOutputs;
+    bStartupAttempted : BOOL := FALSE;
+    bCatalogReady : BOOL := FALSE;
+    bOutputBound : BOOL := FALSE;
+    bMqttInitialized : BOOL := FALSE;
+    i : UINT;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbSimulationInputs(
-    stInputs => stInputs
-);
+      <ST><![CDATA[{IF defined (S85_SIM)}
+{IF defined (S85_HW)}
+{error 'Define exactly one of S85_SIM or S85_HW'}
+{END_IF}
+{ELSE}
+{IF defined (S85_HW)}
+{IF defined (S85_TEST_BUILD)}
+{error 'S85_HW cannot be combined with S85_TEST_BUILD'}
+{END_IF}
+{ELSE}
+{error 'Define exactly one of S85_SIM or S85_HW'}
+{END_IF}
+{END_IF}
+{IF defined (S85_PROD)}
+{IF defined (S85_TEST_BUILD)}
+{error 'S85_PROD cannot be combined with S85_TEST_BUILD'}
+{END_IF}
+{END_IF}
 
-fbHome(
-    stInputs := stInputs,
-    stOutputs => stOutputs
-);
+IF NOT bStartupAttempted THEN
+    bStartupAttempted := TRUE;
+    fbCatalog.BeginRegistration();
+    IF fbHome.RegisterLights(fbCatalog := fbCatalog) THEN
+        bCatalogReady := fbCatalog.Seal();
+    END_IF
+    IF bCatalogReady THEN
+        {IF defined (S85_SIM)}
+        bOutputBound := fbSimulationOutputs.BindCatalog(fbCatalog := fbCatalog);
+        {ELSE}
+        bOutputBound := fbBeckhoffOutputs.BindCatalog(fbCatalog := fbCatalog);
+        {END_IF}
+    END_IF
+    {IF defined (S85_TEST_BUILD)}
+    bMqttInitialized := FALSE;
+    {ELSE}
+    IF bCatalogReady AND bOutputBound THEN
+        bMqttInitialized := fbMqtt.Init(fbCatalog := fbCatalog);
+    END_IF
+    {END_IF}
+END_IF
 
+FOR i := 1 TO GVL_HomeLimits.cMaxLights DO
+    stInputs.aLightCommands[i].bValid := FALSE;
+    stInputs.aLightCommands[i].bOn := FALSE;
+END_FOR
+
+IF bCatalogReady AND bOutputBound THEN
+    {IF defined (S85_SIM)}
+    fbSimulationInputs(
+        stInputs => stInputs
+    );
+    {ELSE}
+    fbBeckhoffInputs(
+        stInputs => stInputs
+    );
+    {END_IF}
+    {IF defined (S85_TEST_BUILD)}
+    (* Unit tests do not run the live MQTT client. *)
+    {ELSE}
+    (* Commands received in the previous MQTT scan are consumed exactly once. *)
+    IF bMqttInitialized THEN
+        fbMqtt.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+    END_IF
+    {END_IF}
+    fbHome(
+        stInputs := stInputs,
+        stOutputs := stOutputs
+    );
+ELSE
+    FOR i := 1 TO GVL_HomeLimits.cMaxLights DO
+        stOutputs.aLights[i].bValid := FALSE;
+        stOutputs.aLights[i].bOn := FALSE;
+    END_FOR
+END_IF
+
+{IF defined (S85_SIM)}
 fbSimulationOutputs(
     stOutputs := stOutputs
-);]]></ST>
+);
+{ELSE}
+fbBeckhoffOutputs(
+    stOutputs := stOutputs
+);
+{END_IF}
+
+{IF defined (S85_TEST_BUILD)}
+(* No network client is executed in unit-test builds. *)
+{ELSE}
+(* The transport observes this scan's authoritative outputs, not a queued history. *)
+fbMqtt.Cycle(
+    stOutputs := stOutputs,
+    sHostName := '',
+    nHostPort := 0,
+    bConfigurationReady := FALSE
+);
+{END_IF}
+
+{IF defined (S85_SIM)}
+{IF defined (S85_TEST_BUILD)}
+PRG_Tests();
+{END_IF}
+{END_IF}]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

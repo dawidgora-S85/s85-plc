@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttLightProtocolTests" Id="{7fb4cd04-d696-4b87-b235-cfe45c3ca9bf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightProtocolTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[RoutesCommandsToHandlesAndConsumesOnce();
+ReconnectAndSnapshotScheduleEveryEntity();
+InitialSyncBarrierAndFairBoundedSelection();
+DisconnectClearsPendingCommand();
+InvalidHandlesAreIgnored();
+MalformedCommandsAreIgnored();
+OnlineFollowsAcceptedInitialState();]]></ST></Implementation>
+    <Method Name="RoutesCommandsToHandlesAndConsumesOnce" Id="{e54f8dc0-0877-4e30-b6d7-e0b9b82be317}">
+      <Declaration><![CDATA[METHOD PRIVATE RoutesCommandsToHandlesAndConsumesOnce
+VAR_INST
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stInputs : ST_HomeInputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Distinct exact command topics route absolute commands to their handles for one scan');
+aEntities[1].nHandle := 1;
+aEntities[1].sCommandTopic := 'ha/lamp-one/set';
+aEntities[2].nHandle := 2;
+aEntities[2].sCommandTopic := 'ha/lamp-two/set';
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'ha/lamp-two/set', nReceivedTopicSize := 15, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertTrue(Condition := stInputs.aLightCommands[2].bValid AND stInputs.aLightCommands[2].bOn, Message := 'Second topic controls handle 2, not handle 1');
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Other handle is not commanded');
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[2].bValid, Message := 'Consumed command is not replayed next scan');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'ha/lamp-two/set', nReceivedTopicSize := 15, sReceivedPayload := 'OFF', nReceivedPayloadSize := 3);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertTrue(Condition := stInputs.aLightCommands[2].bValid AND NOT stInputs.aLightCommands[2].bOn, Message := 'Repeated absolute OFF remains OFF');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ReconnectAndSnapshotScheduleEveryEntity" Id="{237e9a75-71bc-40dc-908f-3ecb4ccdb0fa}">
+      <Declaration><![CDATA[METHOD PRIVATE ReconnectAndSnapshotScheduleEveryEntity
+VAR_INST
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stOutputs : ST_HomeOutputs;
+    nSeen : UINT;
+    nScan : UINT;
+    bStateOneSeen : BOOL;
+    bStateTwoSeen : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Reconnect and periodic snapshot schedule discovery and current valid states for each entity');
+aEntities[1].nHandle := 1;
+aEntities[1].sCommandTopic := 'one/set';
+aEntities[2].nHandle := 2;
+aEntities[2].sCommandTopic := 'two/set';
+stOutputs.aLights[1].bValid := TRUE;
+stOutputs.aLights[1].bOn := TRUE;
+stOutputs.aLights[2].bValid := TRUE;
+stOutputs.aLights[2].bOn := FALSE;
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, stOutputs := stOutputs, bSnapshotEvent := TRUE);
+nSeen := 0;
+FOR nScan := 1 TO 4 DO
+    IF fbProtocol.nPublishKind = 1 THEN nSeen := nSeen + 1; END_IF
+    IF (fbProtocol.nPublishKind = 2) AND (fbProtocol.nPublishHandle = 1) THEN bStateOneSeen := TRUE; END_IF
+    IF (fbProtocol.nPublishKind = 2) AND (fbProtocol.nPublishHandle = 2) THEN bStateTwoSeen := TRUE; END_IF
+    fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, stOutputs := stOutputs, bSnapshotEvent := TRUE, nPreviousPublishKind := fbProtocol.nPublishKind, nPreviousPublishHandle := fbProtocol.nPublishHandle, bPreviousPublishAccepted := TRUE);
+END_FOR
+AssertTrue(Condition := nSeen >= 2, Message := 'Both entities get discovery attempts');
+AssertTrue(Condition := bStateOneSeen AND bStateTwoSeen, Message := 'Periodic authoritative snapshot includes both valid states');
+AssertTrue(Condition := fbProtocol.nPublishKind <= 4, Message := 'Selection is bounded to protocol kinds');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, stOutputs := stOutputs, bMessageAvailable := TRUE, sReceivedTopic := 'homeassistant/status', nReceivedTopicSize := 20, sReceivedPayload := 'online', nReceivedPayloadSize := 6);
+AssertTrue(Condition := fbProtocol.nPublishKind = 1, Message := 'HA birth starts discovery resynchronization');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="InitialSyncBarrierAndFairBoundedSelection" Id="{bd5bc8de-08ce-4adf-9751-d5a2cf0499d4}">
+      <Declaration><![CDATA[METHOD PRIVATE InitialSyncBarrierAndFairBoundedSelection
+VAR_INST
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stOutputs : ST_HomeOutputs;
+    nScan : UINT;
+    bSawHeartbeat : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Online waits for accepted initial entity publications and heartbeat gets a bounded slot');
+aEntities[1].nHandle := 1;
+aEntities[1].sCommandTopic := 'one/set';
+aEntities[2].nHandle := 2;
+aEntities[2].sCommandTopic := 'two/set';
+stOutputs.aLights[1].bValid := TRUE;
+stOutputs.aLights[2].bValid := TRUE;
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, stOutputs := stOutputs, bHeartbeatEvent := TRUE);
+AssertTrue(Condition := fbProtocol.nPublishKind <> 3, Message := 'Online is barred until both Discovery and State calls accepted');
+bSawHeartbeat := FALSE;
+FOR nScan := 1 TO 20 DO
+    IF fbProtocol.nPublishKind = 4 THEN bSawHeartbeat := TRUE; END_IF
+    fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 2, aEntities := aEntities, stOutputs := stOutputs, bHeartbeatEvent := TRUE, nPreviousPublishKind := fbProtocol.nPublishKind, nPreviousPublishHandle := fbProtocol.nPublishHandle, bPreviousPublishAccepted := FALSE);
+END_FOR
+AssertTrue(Condition := bSawHeartbeat, Message := 'Heartbeat receives fair selection despite rejected entity calls');
+AssertTrue(Condition := (fbProtocol.nPublishKind >= 0) AND (fbProtocol.nPublishKind <= 4), Message := 'Candidate remains within bounded kind range');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="DisconnectClearsPendingCommand" Id="{14ac1117-4995-48fa-87ed-7374e47d5c60}">
+      <Declaration><![CDATA[METHOD PRIVATE DisconnectClearsPendingCommand
+VAR_INST
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stInputs : ST_HomeInputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Disconnect discards a command not applied before disconnect');
+aEntities[1].nHandle := 1;
+aEntities[1].sCommandTopic := 'one/set';
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 7, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
+fbProtocol(bConnected := FALSE, bSubscriptionsReady := FALSE, nEntityCount := 1, aEntities := aEntities);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Disconnected pending command is cleared rather than replayed');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="InvalidHandlesAreIgnored" Id="{4f5be506-e8ba-4b0e-b684-2025eca8dc2d}">
+      <Declaration><![CDATA[METHOD PRIVATE InvalidHandlesAreIgnored
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stInputs : ST_HomeInputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Invalid handles do not index pending command arrays');
+aEntities[1].nHandle := 0;
+aEntities[1].sCommandTopic := 'zero/set';
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'zero/set', nReceivedTopicSize := 8, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := FALSE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Zero handle is rejected even when commands are disabled');
+aEntities[1].nHandle := GVL_HomeLimits.cMaxLights + 1;
+aEntities[1].sCommandTopic := 'over/set';
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'over/set', nReceivedTopicSize := 8, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Out-of-range handle is rejected without array access');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="MalformedCommandsAreIgnored" Id="{487a90af-5881-4ee3-b71e-426d36146872}">
+      <Declaration><![CDATA[METHOD PRIVATE MalformedCommandsAreIgnored
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stInputs : ST_HomeInputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Only an exact registered command topic and ON or OFF bytes are accepted');
+aEntities[1].nHandle := 1;
+aEntities[1].sCommandTopic := 'one/set';
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'other/set', nReceivedTopicSize := 9, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Unknown command topic must be ignored');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 7, sReceivedPayload := 'on', nReceivedPayloadSize := 2);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Lowercase payload must be ignored');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 7, sReceivedPayload := 'ON ', nReceivedPayloadSize := 3);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Extra payload byte must be ignored');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, bMessageAvailable := TRUE, sReceivedTopic := 'one/set', nReceivedTopicSize := 8, sReceivedPayload := 'ON', nReceivedPayloadSize := 2);
+fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+AssertFalse(Condition := stInputs.aLightCommands[1].bValid, Message := 'Mismatched topic byte count must be ignored');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="OnlineFollowsAcceptedInitialState" Id="{13a262b7-1a47-4c4c-b769-f299962fcdea}">
+      <Declaration><![CDATA[METHOD PRIVATE OnlineFollowsAcceptedInitialState
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Online waits for a valid state and accepted initial discovery and state');
+aEntities[1].nHandle := 1;
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, stOutputs := stOutputs);
+AssertTrue(Condition := fbProtocol.nPublishKind = 1, Message := 'Discovery is requested first');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, stOutputs := stOutputs, nPreviousPublishKind := 1, nPreviousPublishHandle := 1, bPreviousPublishAccepted := TRUE);
+AssertFalse(Condition := fbProtocol.nPublishKind = 3, Message := 'An invalid state cannot satisfy initial synchronization');
+stOutputs.aLights[1].bValid := TRUE;
+stOutputs.aLights[1].bOn := FALSE;
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, stOutputs := stOutputs);
+AssertTrue(Condition := fbProtocol.nPublishKind = 2, Message := 'A valid OFF state must be published');
+fbProtocol(bConnected := TRUE, bSubscriptionsReady := TRUE, nEntityCount := 1, aEntities := aEntities, stOutputs := stOutputs, nPreviousPublishKind := 2, nPreviousPublishHandle := 1, bPreviousPublishAccepted := TRUE);
+AssertTrue(Condition := fbProtocol.nPublishKind = 3, Message := 'Online is eligible after initial state and Discovery calls are accepted');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

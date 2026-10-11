@@ -2,12 +2,25 @@
 <TcPlcObject Version="1.1.0.1">
   <POU Name="PRG_Tests" Id="{879b7b3f-bff0-4ef4-9304-d849213a653e}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM PRG_Tests
+{IF defined (S85_PROD)}
+{IF defined (S85_TEST_BUILD)}
+{error 'S85_PROD and S85_TEST_BUILD cannot both be defined'}
+{END_IF}
+{END_IF}
 VAR
+{IF defined (S85_TEST_BUILD)}
     fbLightTests : FB_LightTests;
-	fbButtonTests : FB_ButtonTests;
+    fbButtonTests : FB_ButtonTests;
+    fbLightCatalogTests : FB_LightCatalogTests;
+    fbLocationWorkshopTests : FB_Location_WorkshopTests;
+    fbMqttLightBuilderTests : FB_MqttLightBuilderTests;
+    fbMqttLightProtocolTests : FB_MqttLightProtocolTests;
+{END_IF}
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[TcUnit.RUN();]]></ST>
+      <ST><![CDATA[{IF defined (S85_TEST_BUILD)}
+TcUnit.RUN();
+{END_IF}]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

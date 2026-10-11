@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_WorkshopConfig" Id="{c1144eab-69a6-471d-9ccf-4fbd267442a0}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL CONSTANT
+    stMainLight : ST_LightDefinition := (sLocationCode := 'H-L1-09', sLocationSlug := 'workshop', sLocationName := 'Workshop', sId := 'main', sName := 'Main', nButtonIndex := 1);
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

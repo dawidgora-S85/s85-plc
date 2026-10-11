@@ -7,19 +7,32 @@ VAR_INPUT
 	stInputs : ST_HomeInputs;
 END_VAR
 
-VAR_OUTPUT
+VAR_IN_OUT
 	stOutputs : ST_HomeOutputs;
 END_VAR
 
 VAR
-	fbDummyRoom : FB_DummyRoom;
+    fbWorkshop : FB_Location_Workshop;
+    i : UINT;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbDummyRoom(
-    stInputs := stInputs.DummyRoom,
-    stOutputs => stOutputs.DummyRoom
+      <ST><![CDATA[FOR i := 1 TO GVL_HomeLimits.cMaxLights DO
+    stOutputs.aLights[i].bValid := FALSE;
+    stOutputs.aLights[i].bOn := FALSE;
+END_FOR
+
+fbWorkshop(
+    stInputs := stInputs,
+    stOutputs := stOutputs
 );]]></ST>
     </Implementation>
+    <Method Name="RegisterLights" Id="{c23d2613-6f8d-4c0d-9ae8-f2f8721a8d13}">
+      <Declaration><![CDATA[METHOD PUBLIC RegisterLights : BOOL
+VAR_IN_OUT
+    fbCatalog : FB_LightCatalog;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[RegisterLights := fbWorkshop.RegisterLights(fbCatalog := fbCatalog);]]></ST></Implementation>
+    </Method>
   </POU>
 </TcPlcObject>

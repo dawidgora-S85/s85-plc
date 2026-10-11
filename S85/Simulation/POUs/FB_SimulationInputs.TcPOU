@@ -7,10 +7,10 @@ VAR_OUTPUT
 END_VAR
 
 VAR
-    bDummyRoomButton : BOOL;
+    bWorkshopMainButton : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[stInputs.DummyRoom.bButton := bDummyRoomButton;]]></ST>
+        <ST><![CDATA[stInputs.aButtons[GVL_WorkshopConfig.stMainLight.nButtonIndex] := bWorkshopMainButton;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

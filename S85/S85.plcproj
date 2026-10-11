@@ -16,34 +16,64 @@
     <Implicit_KindOfTask>{c4a135c5-884f-4f11-b2ec-cc4413e8771b}</Implicit_KindOfTask>
     <Implicit_Jitter_Distribution>{b559f113-fa13-4e67-b70a-5454bfd2e3a7}</Implicit_Jitter_Distribution>
     <LibraryReferences>{e6906c99-6e5d-4d83-b388-5cab0d04dee2}</LibraryReferences>
-    <CompilerDefines>VISU_USEPROPERTYINFO</CompilerDefines>
+    <CompilerDefines>S85_SIM</CompilerDefines>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Application\POUs\FB_Home.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Application\POUs\FB_LightCatalog.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Application\DUTs\ST_LightDefinition.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Application\POUs\MAIN.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Rooms\DUTs\ST_DummyRoomInputs.TcDUT">
+    <Compile Include="Configuration\Locations\GVLs\GVL_WorkshopConfig.TcGVL">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Rooms\DUTs\ST_DummyRoomOutputs.TcDUT">
+    <Compile Include="Configuration\Locations\POUs\FB_Location_Workshop.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Rooms\POUs\FB_DummyRoom.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Domains\Lightning\POUs\FB_Light.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="GlobalTextList.TcGTLO">
+    <Compile Include="Domains\Lighting\POUs\FB_Light.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeInputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeOutputs.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Logical\DUTs\ST_LightCommand.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Logical\DUTs\ST_LightState.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Logical\GVLs\GVL_HomeLimits.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Beckhoff\POUs\FB_BeckhoffInputs.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Beckhoff\POUs\FB_BeckhoffOutputs.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_BeckhoffIO.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\DUTs\ST_MqttLightEntity.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttIntegration.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttLightBuilder.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttLightProtocol.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="PlcTask.TcTTO">
@@ -58,11 +88,19 @@
     <Compile Include="Simulation\POUs\FB_SimulationOutputs.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Simulation\Visualization\VISU_Simulation.TcVIS">
-      <SubType>Code</SubType>
-      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
-    </Compile>
     <Compile Include="Tests\Domains\Lighting\POUs\FB_LightTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Application\POUs\FB_LightCatalogTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Configuration\Locations\POUs\FB_Location_WorkshopTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Infrastructure\Integrations\MQTT\POUs\FB_MqttLightBuilderTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Infrastructure\Integrations\MQTT\POUs\FB_MqttLightProtocolTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Tests\PRG_Tests.TcPOU">
@@ -71,79 +109,51 @@
     <Compile Include="Tests\Shared\POUs\FB_ButtonTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Visualization Manager.TcVMO">
-      <SubType>Code</SubType>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Application" />
     <Folder Include="Application\POUs" />
-    <Folder Include="Configuration\Rooms" />
-    <Folder Include="Configuration\Rooms\DUTs" />
-    <Folder Include="Configuration\Rooms\POUs" />
+    <Folder Include="Application\DUTs" />
+    <Folder Include="Configuration\Locations" />
+    <Folder Include="Configuration\Locations\GVLs" />
+    <Folder Include="Configuration\Locations\POUs" />
     <Folder Include="Domains" />
-    <Folder Include="Domains\Lightning" />
-    <Folder Include="Domains\Lightning\POUs" />
+    <Folder Include="Domains\Lighting" />
+    <Folder Include="Domains\Lighting\POUs" />
     <Folder Include="Infrastructure" />
     <Folder Include="Infrastructure\IO" />
+    <Folder Include="Infrastructure\IO\Beckhoff" />
+    <Folder Include="Infrastructure\IO\Beckhoff\POUs" />
+    <Folder Include="Infrastructure\IO\Beckhoff\GVLs" />
+    <Folder Include="Infrastructure\Integrations" />
+    <Folder Include="Infrastructure\Integrations\MQTT" />
+    <Folder Include="Infrastructure\Integrations\MQTT\DUTs" />
+    <Folder Include="Infrastructure\Integrations\MQTT\POUs" />
     <Folder Include="Configuration" />
     <Folder Include="Infrastructure\IO\Logical" />
     <Folder Include="Infrastructure\IO\Logical\DUTs" />
+    <Folder Include="Infrastructure\IO\Logical\GVLs" />
     <Folder Include="Shared\POUs" />
-    <Folder Include="Simulation\Visualization" />
     <Folder Include="Simulation\POUs" />
     <Folder Include="Tests" />
+    <Folder Include="Tests\Application" />
+    <Folder Include="Tests\Application\POUs" />
     <Folder Include="Shared" />
     <Folder Include="Simulation" />
     <Folder Include="Tests\Domains" />
     <Folder Include="Tests\Domains\Lighting" />
     <Folder Include="Tests\Domains\Lighting\POUs" />
+    <Folder Include="Tests\Configuration" />
+    <Folder Include="Tests\Configuration\Locations" />
+    <Folder Include="Tests\Configuration\Locations\POUs" />
+    <Folder Include="Tests\Infrastructure" />
+    <Folder Include="Tests\Infrastructure\Integrations" />
+    <Folder Include="Tests\Infrastructure\Integrations\MQTT" />
+    <Folder Include="Tests\Infrastructure\Integrations\MQTT\POUs" />
     <Folder Include="Tests\Shared" />
     <Folder Include="Tests\Shared\POUs" />
   </ItemGroup>
   <ItemGroup>
-    <PlaceholderReference Include="System_VisuElemMeter">
-      <DefaultResolution>VisuElemMeter, 4.10.0.0 (System)</DefaultResolution>
-      <Namespace>VisuElemMeter</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
-    <PlaceholderReference Include="System_VisuElems">
-      <DefaultResolution>VisuElems, 4.10.0.0 (System)</DefaultResolution>
-      <Namespace>VisuElems</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
-    <PlaceholderReference Include="System_VisuElemsSpecialControls">
-      <DefaultResolution>VisuElemsSpecialControls, 4.7.0.0 (System)</DefaultResolution>
-      <Namespace>VisuElemsSpecialControls</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
-    <PlaceholderReference Include="System_VisuElemsWinControls">
-      <DefaultResolution>VisuElemsWinControls, 4.10.0.0 (System)</DefaultResolution>
-      <Namespace>VisuElemsWinControls</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
-    <PlaceholderReference Include="System_VisuElemTextEditor">
-      <DefaultResolution>VisuElemTextEditor, 4.8.0.0 (System)</DefaultResolution>
-      <Namespace>VisuElemTextEditor</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
-    <PlaceholderReference Include="System_VisuInputs">
-      <DefaultResolution>VisuInputs, 4.7.0.0 (System)</DefaultResolution>
-      <Namespace>VisuInputs</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
-    <PlaceholderReference Include="System_VisuNativeControl">
-      <DefaultResolution>VisuNativeControl, 4.9.0.0 (System)</DefaultResolution>
-      <Namespace>VisuNativeControl</Namespace>
-      <SystemLibrary>true</SystemLibrary>
-      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
-    </PlaceholderReference>
     <PlaceholderReference Include="Tc2_Standard">
       <DefaultResolution>Tc2_Standard, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_Standard</Namespace>
@@ -152,10 +162,22 @@
       <DefaultResolution>Tc2_System, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_System</Namespace>
     </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_Utilities">
+      <DefaultResolution>Tc2_Utilities, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_Utilities</Namespace>
+    </PlaceholderReference>
     <PlaceholderReference Include="Tc3_Module">
       <DefaultResolution>Tc3_Module, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc3_Module</Namespace>
       <SystemLibrary>true</SystemLibrary>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc3_IotBase">
+      <DefaultResolution>Tc3_IotBase, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc3_IotBase</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc3_JsonXml">
+      <DefaultResolution>Tc3_JsonXml, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc3_JsonXml</Namespace>
     </PlaceholderReference>
     <PlaceholderReference Include="TcUnit">
       <DefaultResolution>TcUnit, * (www.tcunit.org)</DefaultResolution>

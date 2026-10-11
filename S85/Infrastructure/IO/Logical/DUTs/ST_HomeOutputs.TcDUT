@@ -3,7 +3,7 @@
   <DUT Name="ST_HomeOutputs" Id="{d9d0aa6c-92c9-448e-8a2d-c05d1f979c07}">
     <Declaration><![CDATA[TYPE ST_HomeOutputs :
 STRUCT
-    DummyRoom : ST_DummyRoomOutputs;
+    aLights : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_LightState;
 END_STRUCT
 END_TYPE]]></Declaration>
   </DUT>

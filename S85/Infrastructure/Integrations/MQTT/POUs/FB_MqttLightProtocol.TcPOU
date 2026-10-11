@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttLightProtocol" Id="{aa39b66e-3f65-460a-9e8d-dbd81ef5dc83}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightProtocol
+VAR_INPUT
+    bConnected : BOOL;
+    bSubscriptionsReady : BOOL;
+    nEntityCount : UINT;
+    stOutputs : ST_HomeOutputs;
+    bMessageAvailable : BOOL;
+    sReceivedTopic : STRING(256);
+    nReceivedTopicSize : UDINT;
+    sReceivedPayload : STRING(8);
+    nReceivedPayloadSize : UDINT;
+    bSnapshotEvent : BOOL;
+    bHeartbeatEvent : BOOL;
+    bForceReset : BOOL;
+    nPreviousPublishKind : USINT;
+    nPreviousPublishHandle : UINT;
+    bPreviousPublishAccepted : BOOL;
+END_VAR
+VAR_IN_OUT CONSTANT
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+END_VAR
+VAR_OUTPUT
+    nPublishKind : USINT;
+    nPublishHandle : UINT;
+    bOnlinePending : BOOL;
+    bHeartbeatPending : BOOL;
+END_VAR
+VAR
+    aDiscoveryPending : ARRAY[1..GVL_HomeLimits.cMaxLights] OF BOOL;
+    aStatePending : ARRAY[1..GVL_HomeLimits.cMaxLights] OF BOOL;
+    aInitialDiscoveryAccepted : ARRAY[1..GVL_HomeLimits.cMaxLights] OF BOOL;
+    aInitialStateAccepted : ARRAY[1..GVL_HomeLimits.cMaxLights] OF BOOL;
+    aLastOn : ARRAY[1..GVL_HomeLimits.cMaxLights] OF BOOL;
+    aSeen : ARRAY[1..GVL_HomeLimits.cMaxLights] OF BOOL;
+    aPendingCommands : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_LightCommand;
+    bWasConnected : BOOL;
+    bOnlineEligible : BOOL;
+    bJustConnected : BOOL;
+    bHaBirth : BOOL;
+    bAllInitialComplete : BOOL;
+    nNextSlot : UINT;
+    nSlotCount : UINT;
+    nCandidate : UINT;
+    nOffset : UINT;
+    nIndex : UINT;
+    nHandle : UINT;
+    nCount : UINT;
+    bHandleStateValid : BOOL;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[nPublishKind := 0;
+nPublishHandle := 0;
+bHaBirth := FALSE;
+nCount := nEntityCount;
+IF nCount > GVL_HomeLimits.cMaxLights THEN nCount := GVL_HomeLimits.cMaxLights; END_IF
+nSlotCount := (2 * nCount) + 2;
+IF bForceReset OR NOT bConnected THEN
+    bWasConnected := FALSE;
+    bOnlineEligible := FALSE;
+    bOnlinePending := FALSE;
+    bHeartbeatPending := FALSE;
+    nNextSlot := 0;
+    FOR nIndex := 1 TO GVL_HomeLimits.cMaxLights DO
+        aDiscoveryPending[nIndex] := FALSE;
+        aStatePending[nIndex] := FALSE;
+        aInitialDiscoveryAccepted[nIndex] := FALSE;
+        aInitialStateAccepted[nIndex] := FALSE;
+        aSeen[nIndex] := FALSE;
+        aPendingCommands[nIndex].bValid := FALSE;
+    END_FOR
+ELSE
+    bJustConnected := NOT bWasConnected;
+    IF bJustConnected THEN
+        bWasConnected := TRUE;
+        bOnlineEligible := TRUE;
+        bOnlinePending := TRUE;
+        bHeartbeatPending := FALSE;
+        FOR nIndex := 1 TO nCount DO
+            nHandle := aEntities[nIndex].nHandle;
+            aDiscoveryPending[nIndex] := TRUE;
+            bHandleStateValid := FALSE;
+            IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
+                bHandleStateValid := stOutputs.aLights[nHandle].bValid;
+            END_IF
+            aStatePending[nIndex] := bHandleStateValid;
+            aInitialDiscoveryAccepted[nIndex] := FALSE;
+            aInitialStateAccepted[nIndex] := FALSE;
+            aSeen[nIndex] := aStatePending[nIndex];
+            IF bHandleStateValid THEN aLastOn[nIndex] := stOutputs.aLights[nHandle].bOn; END_IF
+        END_FOR
+    END_IF
+    IF NOT bJustConnected AND bPreviousPublishAccepted THEN
+        FOR nIndex := 1 TO nCount DO
+            IF aEntities[nIndex].nHandle = nPreviousPublishHandle THEN
+                IF nPreviousPublishKind = 1 THEN
+                    aDiscoveryPending[nIndex] := FALSE;
+                    IF bOnlineEligible THEN aInitialDiscoveryAccepted[nIndex] := TRUE; END_IF
+                ELSIF nPreviousPublishKind = 2 THEN
+                    aStatePending[nIndex] := FALSE;
+                    IF bOnlineEligible THEN aInitialStateAccepted[nIndex] := TRUE; END_IF
+                END_IF
+            END_IF
+        END_FOR
+        IF nPreviousPublishKind = 3 THEN bOnlinePending := FALSE; END_IF
+        IF nPreviousPublishKind = 4 THEN bHeartbeatPending := FALSE; END_IF
+    END_IF
+    IF bSubscriptionsReady THEN
+        IF bMessageAvailable THEN
+            IF (nReceivedTopicSize = 20) AND (sReceivedTopic = 'homeassistant/status') AND (nReceivedPayloadSize = 6) AND (sReceivedPayload = 'online') THEN
+                bHaBirth := TRUE;
+            ELSE
+                FOR nIndex := 1 TO nCount DO
+                    IF (nReceivedTopicSize = LEN(aEntities[nIndex].sCommandTopic)) AND (sReceivedTopic = aEntities[nIndex].sCommandTopic) THEN
+                        nHandle := aEntities[nIndex].nHandle;
+                        IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
+                            IF (nReceivedPayloadSize = 2) AND (sReceivedPayload = 'ON') THEN
+                                aPendingCommands[nHandle].bValid := TRUE;
+                                aPendingCommands[nHandle].bOn := TRUE;
+                            ELSIF (nReceivedPayloadSize = 3) AND (sReceivedPayload = 'OFF') THEN
+                                aPendingCommands[nHandle].bValid := TRUE;
+                                aPendingCommands[nHandle].bOn := FALSE;
+                            END_IF
+                        END_IF
+                        EXIT;
+                    END_IF
+                END_FOR
+            END_IF
+        END_IF
+        IF bHaBirth THEN
+            bOnlineEligible := TRUE;
+            bOnlinePending := TRUE;
+            FOR nIndex := 1 TO nCount DO
+                nHandle := aEntities[nIndex].nHandle;
+                aDiscoveryPending[nIndex] := TRUE;
+                bHandleStateValid := FALSE;
+                IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
+                    bHandleStateValid := stOutputs.aLights[nHandle].bValid;
+                END_IF
+                aStatePending[nIndex] := bHandleStateValid;
+                aInitialDiscoveryAccepted[nIndex] := FALSE;
+                aInitialStateAccepted[nIndex] := FALSE;
+                aSeen[nIndex] := aStatePending[nIndex];
+                IF bHandleStateValid THEN aLastOn[nIndex] := stOutputs.aLights[nHandle].bOn; END_IF
+            END_FOR
+        END_IF
+        FOR nIndex := 1 TO nCount DO
+            nHandle := aEntities[nIndex].nHandle;
+            IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
+                IF stOutputs.aLights[nHandle].bValid THEN
+                    IF NOT aSeen[nIndex] OR (stOutputs.aLights[nHandle].bOn <> aLastOn[nIndex]) THEN
+                        aStatePending[nIndex] := TRUE;
+                        aLastOn[nIndex] := stOutputs.aLights[nHandle].bOn;
+                    END_IF
+                    aSeen[nIndex] := TRUE;
+                    IF bSnapshotEvent THEN aStatePending[nIndex] := TRUE; END_IF
+                END_IF
+            END_IF
+        END_FOR
+        IF bHeartbeatEvent THEN bHeartbeatPending := TRUE; END_IF
+        bAllInitialComplete := TRUE;
+        FOR nIndex := 1 TO nCount DO
+            IF NOT aInitialDiscoveryAccepted[nIndex] OR NOT aInitialStateAccepted[nIndex] THEN bAllInitialComplete := FALSE; END_IF
+        END_FOR
+        FOR nOffset := 0 TO nSlotCount - 1 DO
+            nCandidate := (nNextSlot + nOffset) MOD nSlotCount;
+            IF nCandidate < (2 * nCount) THEN
+                nIndex := (nCandidate / 2) + 1;
+                IF (nCandidate MOD 2) = 0 THEN
+                    IF aDiscoveryPending[nIndex] THEN
+                        nPublishKind := 1;
+                        nPublishHandle := aEntities[nIndex].nHandle;
+                    END_IF
+                ELSIF aStatePending[nIndex] THEN
+                    nPublishKind := 2;
+                    nPublishHandle := aEntities[nIndex].nHandle;
+                END_IF
+            ELSIF nCandidate = (2 * nCount) THEN
+                IF bOnlineEligible AND bOnlinePending AND bAllInitialComplete THEN nPublishKind := 3; END_IF
+            ELSIF bHeartbeatPending THEN
+                nPublishKind := 4;
+            END_IF
+            IF nPublishKind <> 0 THEN
+                nNextSlot := (nCandidate + 1) MOD nSlotCount;
+                EXIT;
+            END_IF
+        END_FOR
+    END_IF
+END_IF]]></ST></Implementation>
+    <Method Name="ApplyPendingCommands" Id="{475b7996-8156-43e6-a165-0d44cbead262}">
+      <Declaration><![CDATA[METHOD ApplyPendingCommands
+VAR_IN_OUT
+    stInputs : ST_HomeInputs;
+END_VAR
+VAR_INPUT
+    bAllowed : BOOL;
+END_VAR
+VAR
+    nIndex : UINT;
+    nHandle : UINT;
+    nCount : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[FOR nIndex := 1 TO GVL_HomeLimits.cMaxLights DO
+    stInputs.aLightCommands[nIndex].bValid := FALSE;
+END_FOR
+ nCount := nEntityCount;
+ IF nCount > GVL_HomeLimits.cMaxLights THEN nCount := GVL_HomeLimits.cMaxLights; END_IF
+ FOR nIndex := 1 TO nCount DO
+    nHandle := aEntities[nIndex].nHandle;
+     IF (nHandle >= 1) AND (nHandle <= GVL_HomeLimits.cMaxLights) THEN
+         IF aPendingCommands[nHandle].bValid THEN
+             IF bAllowed AND bConnected AND bSubscriptionsReady AND NOT bForceReset THEN
+                 stInputs.aLightCommands[nHandle] := aPendingCommands[nHandle];
+             END_IF
+             aPendingCommands[nHandle].bValid := FALSE;
+         END_IF
+     END_IF
+END_FOR]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

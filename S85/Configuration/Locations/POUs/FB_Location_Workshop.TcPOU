@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Location_Workshop" Id="{ec750405-3890-4654-994f-cda0aa9720a1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Workshop
+VAR_INPUT
+    stInputs : ST_HomeInputs;
+END_VAR
+
+VAR_IN_OUT
+    stOutputs : ST_HomeOutputs;
+END_VAR
+
+VAR
+    nMainHandle : UINT := 0;
+    fbMainButton : FB_Button;
+    fbMainLight : FB_Light;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF nMainHandle = 0 OR nMainHandle > GVL_HomeLimits.cMaxLights THEN
+    RETURN;
+END_IF
+
+fbMainButton(
+    bPressed := stInputs.aButtons[GVL_WorkshopConfig.stMainLight.nButtonIndex]
+);
+
+fbMainLight(
+    bToggle := fbMainButton.bShortPress,
+    bSetValid := stInputs.aLightCommands[nMainHandle].bValid AND NOT fbMainButton.bShortPress,
+    bSetOn := stInputs.aLightCommands[nMainHandle].bOn
+);
+
+stOutputs.aLights[nMainHandle].bValid := TRUE;
+stOutputs.aLights[nMainHandle].bOn := fbMainLight.bOn;]]></ST>
+    </Implementation>
+    <Method Name="RegisterLights" Id="{f80a87d0-80a4-45ea-a3db-c5a6ceca75b7}">
+      <Declaration><![CDATA[METHOD PUBLIC RegisterLights : BOOL
+VAR_IN_OUT
+    fbCatalog : FB_LightCatalog;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nMainHandle := fbCatalog.RegisterLight(stDefinition := GVL_WorkshopConfig.stMainLight);
+RegisterLights := nMainHandle <> 0;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

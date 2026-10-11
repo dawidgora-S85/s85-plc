@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Location_WorkshopTests" Id="{7495c8e2-5dd1-4575-a08e-a015c801b010}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_WorkshopTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[StartupIsOff();
+ShortPressTogglesMainLight();
+RemoteSetControlsMainLight();
+LocalShortPressWinsOverRemoteSet();
+RemoteCommandIsNotReplayed();]]></ST>
+    </Implementation>
+    <Method Name="StartupIsOff" Id="{db1f9be0-58d0-4a4d-bc03-e46bc9ddc622}">
+      <Declaration><![CDATA[METHOD PRIVATE StartupIsOff
+VAR
+    fbWorkshop : FB_Location_Workshop;
+    fbCatalog : FB_LightCatalog;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Workshop light starts OFF after registration');
+fbCatalog.BeginRegistration();
+AssertTrue(Condition := fbWorkshop.RegisterLights(fbCatalog := fbCatalog), Message := 'Workshop light should register');
+AssertTrue(Condition := fbCatalog.Seal(), Message := 'Catalog should seal');
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertTrue(Condition := stOutputs.aLights[1].bValid, Message := 'Registered light should publish valid state');
+AssertFalse(Condition := stOutputs.aLights[1].bOn, Message := 'Workshop light should start OFF');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ShortPressTogglesMainLight" Id="{30d9f419-205c-4a37-a998-39750a453ef0}">
+      <Declaration><![CDATA[METHOD PRIVATE ShortPressTogglesMainLight
+VAR
+    fbWorkshop : FB_Location_Workshop;
+    fbCatalog : FB_LightCatalog;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Short press toggles workshop main light');
+fbCatalog.BeginRegistration();
+AssertTrue(Condition := fbWorkshop.RegisterLights(fbCatalog := fbCatalog), Message := 'Workshop light should register');
+AssertTrue(Condition := fbCatalog.Seal(), Message := 'Catalog should seal');
+stInputs.aButtons[1] := TRUE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+stInputs.aButtons[1] := FALSE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertTrue(Condition := stOutputs.aLights[1].bOn, Message := 'Short press should turn main light on');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RemoteSetControlsMainLight" Id="{34a5b9e3-df58-491b-aa4e-65aa78481648}">
+      <Declaration><![CDATA[METHOD PRIVATE RemoteSetControlsMainLight
+VAR
+    fbWorkshop : FB_Location_Workshop;
+    fbCatalog : FB_LightCatalog;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Remote set controls workshop main light');
+fbCatalog.BeginRegistration();
+AssertTrue(Condition := fbWorkshop.RegisterLights(fbCatalog := fbCatalog), Message := 'Workshop light should register');
+AssertTrue(Condition := fbCatalog.Seal(), Message := 'Catalog should seal');
+stInputs.aLightCommands[1].bValid := TRUE;
+stInputs.aLightCommands[1].bOn := TRUE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertTrue(Condition := stOutputs.aLights[1].bOn, Message := 'Remote ON request should turn main light on');
+stInputs.aLightCommands[1].bOn := FALSE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertFalse(Condition := stOutputs.aLights[1].bOn, Message := 'Remote OFF request should turn main light off');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="LocalShortPressWinsOverRemoteSet" Id="{04cd4104-330e-46e1-875e-31be133631d5}">
+      <Declaration><![CDATA[METHOD PRIVATE LocalShortPressWinsOverRemoteSet
+VAR
+    fbWorkshop : FB_Location_Workshop;
+    fbCatalog : FB_LightCatalog;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Local short press wins over remote set');
+fbCatalog.BeginRegistration();
+AssertTrue(Condition := fbWorkshop.RegisterLights(fbCatalog := fbCatalog), Message := 'Workshop light should register');
+AssertTrue(Condition := fbCatalog.Seal(), Message := 'Catalog should seal');
+stInputs.aButtons[1] := TRUE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+stInputs.aButtons[1] := FALSE;
+stInputs.aLightCommands[1].bValid := TRUE;
+stInputs.aLightCommands[1].bOn := FALSE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertTrue(Condition := stOutputs.aLights[1].bOn, Message := 'Local short press should win over simultaneous remote OFF request');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RemoteCommandIsNotReplayed" Id="{38bcf47e-8ac4-4351-861d-aaf8bd6d89fb}">
+      <Declaration><![CDATA[METHOD PRIVATE RemoteCommandIsNotReplayed
+VAR
+    fbWorkshop : FB_Location_Workshop;
+    fbCatalog : FB_LightCatalog;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Remote command is not replayed after validity clears');
+fbCatalog.BeginRegistration();
+AssertTrue(Condition := fbWorkshop.RegisterLights(fbCatalog := fbCatalog), Message := 'Workshop light should register');
+AssertTrue(Condition := fbCatalog.Seal(), Message := 'Catalog should seal');
+stInputs.aLightCommands[1].bValid := TRUE;
+stInputs.aLightCommands[1].bOn := TRUE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertTrue(Condition := stOutputs.aLights[1].bOn, Message := 'Valid remote ON request should be applied');
+stInputs.aLightCommands[1].bValid := FALSE;
+stInputs.aLightCommands[1].bOn := FALSE;
+fbWorkshop(stInputs := stInputs, stOutputs := stOutputs);
+AssertTrue(Condition := stOutputs.aLights[1].bOn, Message := 'Invalid command should not replay an OFF value');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

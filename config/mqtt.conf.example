@@ -1,0 +1,7 @@
+# Plain KEY=value configuration. Do not source this file as a shell script.
+# Local target path: /etc/s85/config/mqtt.conf
+# TLS is preferred. TLS startup and CA file path support require target validation.
+MQTT_HOST=broker.example.invalid
+MQTT_PORT=8883
+MQTT_TLS=true
+MQTT_CA_FILE=/etc/s85/certs/mqtt-ca.pem

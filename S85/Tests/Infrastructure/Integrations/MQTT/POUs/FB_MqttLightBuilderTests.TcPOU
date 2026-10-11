@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttLightBuilderTests" Id="{4ef3631f-e04e-4eb0-9df2-b6d281bf74b0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightBuilderTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[BuildsDistinctLightsWithStableIdentity();
+RejectsInvalidAndOversizedValues();]]></ST>
+    </Implementation>
+    <Method Name="BuildsDistinctLightsWithStableIdentity" Id="{39146c4e-a76c-4c64-bf63-179495487496}">
+      <Declaration><![CDATA[METHOD PRIVATE BuildsDistinctLightsWithStableIdentity
+VAR
+    fbBuilder : FB_MqttLightBuilder;
+    stDefinition : ST_LightDefinition;
+    stFirst : ST_MqttLightEntity;
+    stSecond : ST_MqttLightEntity;
+    sFirstUniqueId : STRING(128);
+    nFirstSize : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Generic MQTT light entities derive stable per-light discovery metadata');
+stDefinition.sLocationCode := 'LOC-01';
+stDefinition.sLocationSlug := 'living-room';
+stDefinition.sLocationName := 'Living Room';
+stDefinition.sId := 'ceiling';
+stDefinition.sName := 'Ceiling light';
+AssertTrue(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 1), Message := 'First valid light should build');
+stFirst := fbBuilder.stEntity;
+sFirstUniqueId := stFirst.sUniqueId;
+nFirstSize := stFirst.nDiscoverySize;
+AssertTrue(Condition := stFirst.sCommandTopic = 's85/locations/LOC-01/lights/ceiling/set', Message := 'Command topic should use location and light identity');
+AssertTrue(Condition := stFirst.sStateTopic = 's85/locations/LOC-01/lights/ceiling/state', Message := 'State topic should use location and light identity');
+AssertTrue(Condition := stFirst.sDiscoveryTopic = 'homeassistant/light/s85_living-room_ceiling/config', Message := 'Discovery topic should use generic location identity');
+AssertTrue(Condition := (stFirst.nDiscoverySize > 255) AND (stFirst.nDiscoverySize < 1024), Message := 'Discovery JSON should exceed 255 bytes and fit destination');
+
+AssertTrue(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 99), Message := 'Same metadata should build with a different runtime handle');
+AssertTrue(Condition := (fbBuilder.stEntity.sUniqueId = sFirstUniqueId) AND (fbBuilder.stEntity.sCommandTopic = stFirst.sCommandTopic), Message := 'Derived identity and topic must be independent of runtime handle');
+stDefinition.sId := 'floor';
+stDefinition.sName := 'Floor lamp';
+AssertTrue(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 2), Message := 'Second light in same location should build');
+stSecond := fbBuilder.stEntity;
+AssertTrue(Condition := (stFirst.sCommandTopic <> stSecond.sCommandTopic) AND (stFirst.sStateTopic <> stSecond.sStateTopic) AND (stFirst.sDiscoveryTopic <> stSecond.sDiscoveryTopic) AND (stFirst.sUniqueId <> stSecond.sUniqueId), Message := 'Distinct light IDs should produce distinct derived topics and unique IDs');
+AssertTrue(Condition := (stFirst.sUniqueId = sFirstUniqueId) AND (stFirst.nDiscoverySize = nFirstSize), Message := 'Identity and payload size are independent of runtime handle');
+AssertTrue(Condition := stFirst.sUniqueId = 's85_LOC-01_ceiling', Message := 'Unique ID should not contain the runtime handle');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectsInvalidAndOversizedValues" Id="{181b5c34-5e9e-4ced-b805-6c35d80b69fc}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectsInvalidAndOversizedValues
+VAR
+    fbBuilder : FB_MqttLightBuilder;
+    stDefinition : ST_LightDefinition;
+    i : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Invalid MQTT light metadata fails without a valid payload');
+stDefinition.sLocationCode := 'LOC-01';
+stDefinition.sLocationSlug := 'location';
+stDefinition.sLocationName := 'Location';
+stDefinition.sId := '';
+stDefinition.sName := 'Light';
+AssertFalse(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 1), Message := 'Empty ID must fail');
+AssertTrue(Condition := (fbBuilder.stEntity.nHandle = 0) AND (fbBuilder.stEntity.nDiscoverySize = 0) AND (fbBuilder.stEntity.sDiscoveryPayload = ''), Message := 'Failed build must leave no valid entity payload');
+
+stDefinition.sId := 'id';
+AssertFalse(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 0), Message := 'Zero handle must fail');
+AssertTrue(Condition := fbBuilder.stEntity.sDiscoveryPayload = '', Message := 'Zero handle must not preserve a prior payload');
+
+(* A full-capacity identity is checked before assignment; generated strings must fit. *)
+stDefinition.sLocationCode := '1234567890123456';
+stDefinition.sLocationSlug := '12345678901234567890123456789012';
+stDefinition.sId := '12345678901234567890123456789012';
+AssertTrue(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 3), Message := 'Maximum declared identity lengths fit bounded topic destinations');
+AssertTrue(Condition := (LEN2(ADR(fbBuilder.stEntity.sCommandTopic)) <= 128) AND (LEN2(ADR(fbBuilder.stEntity.sStateTopic)) <= 128) AND (LEN2(ADR(fbBuilder.stEntity.sDiscoveryTopic)) <= 128), Message := 'No derived topic is silently truncated');
+
+(* Control characters expand to six-byte JSON escapes; overflow must fail closed. *)
+stDefinition.sLocationCode := 'LOC-01';
+stDefinition.sLocationSlug := 'location';
+stDefinition.sId := 'light';
+stDefinition.sLocationName := '';
+stDefinition.sName := '';
+FOR i := 1 TO 64 DO
+    stDefinition.sLocationName := CONCAT(stDefinition.sLocationName, '$01');
+    stDefinition.sName := CONCAT(stDefinition.sName, '$01');
+END_FOR
+AssertFalse(Condition := fbBuilder.Build(stDefinition := stDefinition, nHandle := 4), Message := 'Oversized escaped Discovery payload must fail');
+AssertTrue(Condition := (fbBuilder.stEntity.nHandle = 0) AND (fbBuilder.stEntity.nDiscoverySize = 0) AND (fbBuilder.stEntity.sDiscoveryPayload = ''), Message := 'Oversized Discovery payload must not produce a valid entity');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

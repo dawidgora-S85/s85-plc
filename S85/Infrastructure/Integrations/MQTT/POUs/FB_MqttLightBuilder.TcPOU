@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttLightBuilder" Id="{382c1092-1780-4c51-a59c-979be58871ee}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightBuilder
+VAR_OUTPUT
+    stEntity : ST_MqttLightEntity;
+END_VAR
+VAR
+    fbJsonWriter : FB_JsonSaxWriter;
+    sDisplayName : STRING(129);
+    sValue : STRING(128);
+    nCodeLength : UDINT;
+    nSlugLength : UDINT;
+    nLocationNameLength : UDINT;
+    nIdLength : UDINT;
+    nNameLength : UDINT;
+    nCommandLength : UDINT;
+    nStateLength : UDINT;
+    nDiscoveryTopicLength : UDINT;
+    nUniqueIdLength : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Build" Id="{c6805b76-41cf-4e5e-893c-bf3a1087e943}">
+      <Declaration><![CDATA[METHOD PUBLIC Build : BOOL
+VAR_INPUT
+    stDefinition : ST_LightDefinition;
+    nHandle : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[Build := FALSE;
+stEntity.nHandle := 0;
+stEntity.sCommandTopic := '';
+stEntity.sStateTopic := '';
+stEntity.sDiscoveryTopic := '';
+stEntity.sUniqueId := '';
+stEntity.sDiscoveryPayload := '';
+stEntity.nDiscoverySize := 0;
+
+nCodeLength := LEN2(ADR(stDefinition.sLocationCode));
+nSlugLength := LEN2(ADR(stDefinition.sLocationSlug));
+nLocationNameLength := LEN2(ADR(stDefinition.sLocationName));
+nIdLength := LEN2(ADR(stDefinition.sId));
+nNameLength := LEN2(ADR(stDefinition.sName));
+IF (nHandle = 0) OR (nCodeLength = 0) OR (nSlugLength = 0) OR
+   (nLocationNameLength = 0) OR (nIdLength = 0) OR (nNameLength = 0) THEN
+    RETURN;
+END_IF
+
+(* Check the complete byte lengths before CONCAT can assign to a destination. *)
+nCommandLength := 26 + nCodeLength + nIdLength;
+nStateLength := 28 + nCodeLength + nIdLength;
+nDiscoveryTopicLength := 32 + nSlugLength + nIdLength;
+nUniqueIdLength := 5 + nCodeLength + nIdLength;
+IF (nCommandLength > 128) OR (nStateLength > 128) OR
+   (nDiscoveryTopicLength > 128) OR (nUniqueIdLength > 128) THEN
+    RETURN;
+END_IF
+
+sValue := CONCAT('s85/locations/', stDefinition.sLocationCode);
+stEntity.sCommandTopic := CONCAT(CONCAT(CONCAT(sValue, '/lights/'), stDefinition.sId), '/set');
+stEntity.sStateTopic := CONCAT(CONCAT(CONCAT(sValue, '/lights/'), stDefinition.sId), '/state');
+sValue := CONCAT(CONCAT('homeassistant/light/s85_', stDefinition.sLocationSlug), '_');
+stEntity.sDiscoveryTopic := CONCAT(CONCAT(sValue, stDefinition.sId), '/config');
+sValue := CONCAT(CONCAT('s85_', stDefinition.sLocationCode), '_');
+stEntity.sUniqueId := CONCAT(sValue, stDefinition.sId);
+sDisplayName := CONCAT(CONCAT(stDefinition.sLocationName, ' '), stDefinition.sName);
+
+fbJsonWriter.ResetDocument();
+fbJsonWriter.StartObject();
+fbJsonWriter.AddKey('name');
+fbJsonWriter.AddString(sDisplayName);
+fbJsonWriter.AddKey('unique_id');
+fbJsonWriter.AddString(stEntity.sUniqueId);
+fbJsonWriter.AddKey('schema');
+fbJsonWriter.AddString('basic');
+fbJsonWriter.AddKey('command_topic');
+fbJsonWriter.AddString(stEntity.sCommandTopic);
+fbJsonWriter.AddKey('state_topic');
+fbJsonWriter.AddString(stEntity.sStateTopic);
+fbJsonWriter.AddKey('availability_topic');
+fbJsonWriter.AddString('s85/plc/status');
+fbJsonWriter.AddKey('payload_on');
+fbJsonWriter.AddString('ON');
+fbJsonWriter.AddKey('payload_off');
+fbJsonWriter.AddString('OFF');
+fbJsonWriter.AddKey('state_on');
+fbJsonWriter.AddString('ON');
+fbJsonWriter.AddKey('state_off');
+fbJsonWriter.AddString('OFF');
+fbJsonWriter.AddKey('qos');
+fbJsonWriter.AddDint(1);
+fbJsonWriter.AddKey('retain');
+fbJsonWriter.AddBool(FALSE);
+fbJsonWriter.AddKey('device');
+fbJsonWriter.StartObject();
+fbJsonWriter.AddKey('identifiers');
+fbJsonWriter.StartArray();
+fbJsonWriter.AddString('s85-plc');
+fbJsonWriter.EndArray();
+fbJsonWriter.AddKey('name');
+fbJsonWriter.AddString('S85 PLC');
+fbJsonWriter.AddKey('manufacturer');
+fbJsonWriter.AddString('S85');
+fbJsonWriter.EndObject();
+fbJsonWriter.EndObject();
+
+nCopied := fbJsonWriter.CopyDocument(stEntity.sDiscoveryPayload, SIZEOF(stEntity.sDiscoveryPayload));
+IF nCopied = 0 THEN
+    stEntity.sDiscoveryPayload := '';
+    RETURN;
+END_IF
+stEntity.nHandle := nHandle;
+stEntity.nDiscoverySize := nCopied - 1;
+Build := TRUE;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

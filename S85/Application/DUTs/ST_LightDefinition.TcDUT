@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_LightDefinition" Id="{f33452ad-55fc-49e6-bef5-f53ee005d41b}">
+    <Declaration><![CDATA[TYPE ST_LightDefinition :
+STRUCT
+    sLocationCode : STRING(16);
+    sLocationSlug : STRING(32);
+    sLocationName : STRING(64);
+    sId : STRING(32);
+    sName : STRING(64);
+    nButtonIndex : UINT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

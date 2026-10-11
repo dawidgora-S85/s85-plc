@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttIntegration" Id="{2f30da41-2ad6-4eb5-88b6-6bd2c00ef1cf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegration
+VAR_OUTPUT
+    bConnected : BOOL;
+    bError : BOOL;
+    hrErrorCode : HRESULT;
+    bInitialized : BOOL;
+    nEntityCount : UINT;
+END_VAR
+VAR CONSTANT
+    cQueueDepthLimit : UDINT := 64;
+    sOnline : STRING(6) := 'online';
+    sOffline : STRING(7) := 'offline';
+END_VAR
+VAR
+    aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
+    fbBuilder : FB_MqttLightBuilder;
+    fbClient : FB_IotMqtt5Client;
+    fbMessage : FB_IotMqtt5Message;
+    fbProtocol : FB_MqttLightProtocol;
+    fbSubscribeProperties : FB_IotMqtt5SubscribeProperties;
+    fbSnapshotTimer : TON;
+    fbHeartbeatTimer : TON;
+    sConfiguredHostName : STRING(255);
+    sTopicAvailability : STRING(64) := 's85/plc/status';
+    sTopicHeartbeat : STRING(64) := 's85/plc/heartbeat';
+    sTopicHaStatus : STRING(64) := 'homeassistant/status';
+    sPublishTopic : STRING(256);
+    sReceivedTopic : STRING(256);
+    sReceivedPayload : STRING(8);
+    sStatePayload : STRING(3);
+    sHeartbeatPayload : STRING(20);
+    sWillPayload : STRING(7);
+    nReceivedTopicSize : UDINT;
+    nReceivedPayloadSize : UDINT;
+    nPublishKind : USINT;
+    nPublishHandle : UINT;
+    nPreviousPublishKind : USINT;
+    nPreviousPublishHandle : UINT;
+    nNextSubscription : UINT;
+    nHeartbeat : UDINT;
+    nLastLostMessages : UDINT;
+    nConfiguredHostPort : UINT;
+    bConfigurationValid : BOOL;
+    bClientConfigured : BOOL;
+    bConfigurationFault : BOOL;
+    bWasConnected : BOOL;
+    bResetQueuePending : BOOL;
+    bReconnectForQueue : BOOL;
+    bQueueResetComplete : BOOL;
+    bSubscriptionsReady : BOOL;
+    bMessageAvailable : BOOL;
+    bSnapshotEvent : BOOL;
+    bHeartbeatEvent : BOOL;
+    bForceReset : BOOL;
+    bPreviousPublishAccepted : BOOL;
+    bSubscribeAccepted : BOOL;
+    bPublishAccepted : BOOL;
+    bMessageReceived : BOOL;
+    bQueueHealthy : BOOL;
+    nIndex : UINT;
+    nTopicCapacity : UDINT;
+    nPayloadCapacity : UDINT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="Init" Id="{90b6d122-fef9-426c-8277-723f9b780202}">
+      <Declaration><![CDATA[METHOD PUBLIC Init : BOOL
+VAR_IN_OUT
+    fbCatalog : FB_LightCatalog;
+END_VAR
+VAR
+    stDefinition : ST_LightDefinition;
+    nHandle : UINT;
+    nIndex : UINT;
+    bDuplicate : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[Init := FALSE;
+IF bInitialized THEN Init := (nEntityCount > 0); RETURN; END_IF
+nEntityCount := 0;
+FOR nHandle := 1 TO GVL_HomeLimits.cMaxLights DO
+    IF NOT fbCatalog.GetDefinition(nHandle := nHandle, stDefinition => stDefinition) THEN EXIT; END_IF
+    IF NOT fbBuilder.Build(stDefinition := stDefinition, nHandle := nHandle) THEN RETURN; END_IF
+    bDuplicate := FALSE;
+    FOR nIndex := 1 TO nEntityCount DO
+        IF (aEntities[nIndex].sCommandTopic = fbBuilder.stEntity.sCommandTopic) OR (aEntities[nIndex].sStateTopic = fbBuilder.stEntity.sStateTopic) OR (aEntities[nIndex].sDiscoveryTopic = fbBuilder.stEntity.sDiscoveryTopic) OR (aEntities[nIndex].sUniqueId = fbBuilder.stEntity.sUniqueId) THEN bDuplicate := TRUE; END_IF
+    END_FOR
+    IF bDuplicate THEN RETURN; END_IF
+    aEntities[nHandle] := fbBuilder.stEntity;
+    nEntityCount := nHandle;
+END_FOR
+IF nEntityCount = 0 THEN RETURN; END_IF
+bInitialized := TRUE;
+Init := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="ApplyPendingCommands" Id="{a9de069f-5615-4a9d-bccf-338b18cd03a4}">
+      <Declaration><![CDATA[METHOD PUBLIC ApplyPendingCommands
+VAR_IN_OUT
+    stInputs : ST_HomeInputs;
+END_VAR
+VAR_INPUT
+    bAllowed : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbProtocol.ApplyPendingCommands(stInputs := stInputs, bAllowed := bAllowed AND bConnected AND bSubscriptionsReady AND NOT bForceReset);]]></ST></Implementation>
+    </Method>
+    <Method Name="Cycle" Id="{3b0c64b5-dc32-4dd2-8cb1-76e165dfd1bb}">
+      <Declaration><![CDATA[METHOD PUBLIC Cycle
+VAR_INPUT
+    stOutputs : ST_HomeOutputs;
+    sHostName : STRING(255);
+    nHostPort : UINT;
+    bConfigurationReady : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[bConnected := FALSE;
+bError := FALSE;
+hrErrorCode := 0;
+bMessageAvailable := FALSE;
+sReceivedTopic := '';
+sReceivedPayload := '';
+nReceivedTopicSize := 0;
+nReceivedPayloadSize := 0;
+bConfigurationValid := bConfigurationReady AND bInitialized AND (sHostName <> '') AND (FIND(sHostName, ' ') = 0) AND (nHostPort <> 0);
+IF bClientConfigured AND bConfigurationReady AND ((sHostName <> sConfiguredHostName) OR (nHostPort <> nConfiguredHostPort)) THEN
+    bConfigurationFault := TRUE;
+END_IF
+IF bConfigurationReady AND NOT bConfigurationValid THEN bError := TRUE; END_IF
+IF bConfigurationFault THEN bError := TRUE; END_IF
+bConfigurationValid := bConfigurationValid AND NOT bConfigurationFault;
+
+IF NOT bClientConfigured AND bConfigurationValid THEN
+    fbClient.sClientId := 's85-plc';
+    fbClient.sHostName := sHostName;
+    sConfiguredHostName := sHostName;
+    fbClient.nHostPort := nHostPort;
+    nConfiguredHostPort := nHostPort;
+    fbClient.nKeepAlive := 15;
+    fbClient.stConnect.nSessionExpire := 0;
+    fbClient.stWill.sTopic := sTopicAvailability;
+    fbClient.stWill.eQoS := TcIotMqttQos.AtLeastOnceDelivery;
+    fbClient.stWill.bRetain := TRUE;
+    sWillPayload := sOffline;
+    fbClient.stWill.fbPayload.SetData(ADR(sWillPayload), LEN(sWillPayload));
+    fbClient.fbMessageQueue.bOverwriteOldestEntry := FALSE;
+    fbSubscribeProperties.nRetainHandling := 2;
+    bClientConfigured := TRUE;
+    bResetQueuePending := TRUE;
+END_IF
+
+(* One Execute call per scan; invalid/disabled configuration disconnects MQTT. *)
+fbClient.Execute(bConnect := bConfigurationValid AND bClientConfigured AND NOT bReconnectForQueue);
+bConnected := fbClient.bConnected AND bConfigurationValid AND NOT bReconnectForQueue;
+bError := bError OR fbClient.bError;
+hrErrorCode := fbClient.hrErrorCode;
+
+IF NOT bConnected THEN
+    bWasConnected := FALSE;
+    bSubscriptionsReady := FALSE;
+    IF NOT bReconnectForQueue THEN bResetQueuePending := bClientConfigured; END_IF
+    nNextSubscription := 1;
+    fbSnapshotTimer(IN := FALSE, PT := T#60S);
+    fbHeartbeatTimer(IN := FALSE, PT := T#10S);
+    bSnapshotEvent := FALSE;
+    bHeartbeatEvent := FALSE;
+    bMessageAvailable := FALSE;
+    nPreviousPublishKind := 0;
+    nPreviousPublishHandle := 0;
+    bPreviousPublishAccepted := FALSE;
+    IF bReconnectForQueue AND NOT fbClient.bConnected THEN
+        IF fbClient.fbMessageQueue.ResetQueue() THEN
+            nLastLostMessages := fbClient.fbMessageQueue.nLostMessages;
+            bResetQueuePending := FALSE;
+            bQueueResetComplete := TRUE;
+        END_IF
+    END_IF
+ELSE
+    IF NOT bWasConnected THEN
+        bWasConnected := TRUE;
+        bResetQueuePending := TRUE;
+        bSubscriptionsReady := FALSE;
+        nNextSubscription := 1;
+        nPreviousPublishKind := 0;
+        nPreviousPublishHandle := 0;
+        bPreviousPublishAccepted := FALSE;
+        fbSnapshotTimer(IN := FALSE, PT := T#60S);
+        fbHeartbeatTimer(IN := FALSE, PT := T#10S);
+    END_IF
+
+    IF bResetQueuePending THEN
+        IF fbClient.fbMessageQueue.ResetQueue() THEN
+            bResetQueuePending := FALSE;
+            nLastLostMessages := fbClient.fbMessageQueue.nLostMessages;
+        END_IF
+    ELSIF NOT bSubscriptionsReady THEN
+        IF nNextSubscription <= nEntityCount THEN
+            bSubscribeAccepted := fbClient.Subscribe(sTopic := aEntities[nNextSubscription].sCommandTopic, eQoS := TcIotMqttQos.AtLeastOnceDelivery, pProps := fbSubscribeProperties.pSubscribeProperties);
+            IF bSubscribeAccepted THEN nNextSubscription := nNextSubscription + 1; END_IF
+        ELSE
+            bSubscribeAccepted := fbClient.Subscribe(sTopic := sTopicHaStatus, eQoS := TcIotMqttQos.AtLeastOnceDelivery, pProps := fbSubscribeProperties.pSubscribeProperties);
+            IF bSubscribeAccepted THEN bSubscriptionsReady := TRUE; END_IF
+        END_IF
+    ELSE
+        bQueueHealthy := TRUE;
+        IF (fbClient.fbMessageQueue.nLostMessages <> nLastLostMessages) OR (fbClient.fbMessageQueue.nQueuedMessages > cQueueDepthLimit) THEN
+            bQueueHealthy := FALSE;
+            bForceReset := TRUE;
+            bReconnectForQueue := TRUE;
+            bSubscriptionsReady := FALSE;
+            nNextSubscription := 1;
+            bConnected := FALSE;
+        END_IF
+        bMessageAvailable := FALSE;
+        IF bQueueHealthy THEN
+            bMessageReceived := fbClient.fbMessageQueue.Dequeue(fbMessage := fbMessage);
+            IF bMessageReceived THEN
+                sReceivedTopic := '';
+                nReceivedTopicSize := fbMessage.nTopicSize;
+                nReceivedPayloadSize := fbMessage.nPayloadSize;
+                IF (nReceivedTopicSize < SIZEOF(sReceivedTopic)) AND ((nReceivedPayloadSize = 2) OR (nReceivedPayloadSize = 3) OR (nReceivedPayloadSize = 6)) AND (nReceivedPayloadSize <= SIZEOF(sReceivedPayload) - 1) THEN
+                    nTopicCapacity := SIZEOF(sReceivedTopic);
+                    fbMessage.GetTopic(pTopic := ADR(sReceivedTopic), nTopicSize := nTopicCapacity);
+                    IF LEN2(ADR(sReceivedTopic)) = nReceivedTopicSize THEN
+                        sReceivedPayload := '';
+                        nPayloadCapacity := SIZEOF(sReceivedPayload);
+                        fbMessage.GetPayload(pPayload := ADR(sReceivedPayload), nPayloadSize := nPayloadCapacity, bSetNullTermination := TRUE);
+                        bMessageAvailable := TRUE;
+                    END_IF
+                END_IF
+            END_IF
+        END_IF
+    END_IF
+
+    bSnapshotEvent := FALSE;
+    bHeartbeatEvent := FALSE;
+    IF bSubscriptionsReady AND NOT bResetQueuePending AND bConnected THEN
+        fbSnapshotTimer(IN := TRUE, PT := T#60S);
+        IF fbSnapshotTimer.Q THEN
+            bSnapshotEvent := TRUE;
+            fbSnapshotTimer(IN := FALSE, PT := T#60S);
+        END_IF
+        fbHeartbeatTimer(IN := TRUE, PT := T#10S);
+        IF fbHeartbeatTimer.Q THEN
+            bHeartbeatEvent := TRUE;
+            fbHeartbeatTimer(IN := FALSE, PT := T#10S);
+            nHeartbeat := nHeartbeat + 1;
+            sHeartbeatPayload := UDINT_TO_STRING(nHeartbeat);
+        END_IF
+    END_IF
+END_IF
+
+fbProtocol(bConnected := bConnected, bSubscriptionsReady := bSubscriptionsReady AND NOT bResetQueuePending, nEntityCount := nEntityCount, stOutputs := stOutputs, bMessageAvailable := bMessageAvailable, sReceivedTopic := sReceivedTopic, nReceivedTopicSize := nReceivedTopicSize, sReceivedPayload := sReceivedPayload, nReceivedPayloadSize := nReceivedPayloadSize, bSnapshotEvent := bSnapshotEvent, bHeartbeatEvent := bHeartbeatEvent, bForceReset := bForceReset, nPreviousPublishKind := nPreviousPublishKind, nPreviousPublishHandle := nPreviousPublishHandle, bPreviousPublishAccepted := bPreviousPublishAccepted, aEntities := aEntities);
+nPublishKind := fbProtocol.nPublishKind;
+nPublishHandle := fbProtocol.nPublishHandle;
+bPublishAccepted := FALSE;
+IF bConnected AND bSubscriptionsReady AND NOT bResetQueuePending THEN
+    CASE nPublishKind OF
+    1:
+        FOR nIndex := 1 TO nEntityCount DO
+            IF aEntities[nIndex].nHandle = nPublishHandle THEN
+                sPublishTopic := aEntities[nIndex].sDiscoveryTopic;
+                bPublishAccepted := fbClient.Publish(sTopic := sPublishTopic, pPayload := ADR(aEntities[nIndex].sDiscoveryPayload), nPayloadSize := aEntities[nIndex].nDiscoverySize, eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+                EXIT;
+            END_IF
+        END_FOR
+    2:
+        IF (nPublishHandle >= 1) AND (nPublishHandle <= GVL_HomeLimits.cMaxLights) THEN
+            IF stOutputs.aLights[nPublishHandle].bValid THEN
+                FOR nIndex := 1 TO nEntityCount DO
+                    IF aEntities[nIndex].nHandle = nPublishHandle THEN
+                        IF stOutputs.aLights[nPublishHandle].bOn THEN sStatePayload := 'ON'; ELSE sStatePayload := 'OFF'; END_IF
+                        sPublishTopic := aEntities[nIndex].sStateTopic;
+                        bPublishAccepted := fbClient.Publish(sTopic := sPublishTopic, pPayload := ADR(sStatePayload), nPayloadSize := LEN(sStatePayload), eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+                        EXIT;
+                    END_IF
+                END_FOR
+            END_IF
+        END_IF
+    3:
+        sPublishTopic := sTopicAvailability;
+        bPublishAccepted := fbClient.Publish(sTopic := sPublishTopic, pPayload := ADR(sOnline), nPayloadSize := LEN(sOnline), eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+    4:
+        sPublishTopic := sTopicHeartbeat;
+        bPublishAccepted := fbClient.Publish(sTopic := sPublishTopic, pPayload := ADR(sHeartbeatPayload), nPayloadSize := LEN(sHeartbeatPayload), eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := FALSE, bQueue := FALSE);
+    END_CASE
+END_IF
+nPreviousPublishKind := nPublishKind;
+nPreviousPublishHandle := nPublishHandle;
+bPreviousPublishAccepted := bPublishAccepted;
+IF bQueueResetComplete THEN
+    bReconnectForQueue := FALSE;
+    bForceReset := FALSE;
+    bQueueResetComplete := FALSE;
+END_IF
+IF NOT bConfigurationValid THEN bConnected := FALSE; bSubscriptionsReady := FALSE; END_IF]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

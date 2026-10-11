@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_LightTests" Id="{c5856838-1d6b-4b34-b900-07483f8bff5f}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_LightTests EXTENDS TcUnit.FB_TestSuite
@@ -8,98 +8,120 @@ END_VAR]]></Declaration>
       <ST><![CDATA[ToggleTurnsLightOn();
 SecondToggleTurnsLightOff();
 NoToggleKeepsCurrentState();
-HeldToggleTogglesEveryCycle();]]></ST>
+HeldToggleDoesNotRetrigger();
+ToggleRearminAfterRelease();
+SetRequestsForceState();
+ToggleWinsOverSetRequest();
+IndependentLightsKeepIndependentState();]]></ST>
     </Implementation>
-    <Method Name="HeldToggleTogglesEveryCycle" Id="{371fc64a-d964-4d52-8a5d-8e401ded155e}">
-      <Declaration><![CDATA[METHOD PRIVATE HeldToggleTogglesEveryCycle
-VAR
-	fbLight : FB_Light;
-END_VAR
-]]></Declaration>
-      <Implementation>
-        <ST><![CDATA[TEST('Held toggle toggles every cycle');
-
-fbLight.bToggle := TRUE;
-fbLight();
-
-AssertTrue(
-    Condition := fbLight.bOn,
-    Message := 'Light should be ON after first cycle with toggle held'
-);
-
-fbLight();
-
-AssertFalse(
-    Condition := fbLight.bOn,
-    Message := 'Light should be OFF after second cycle with toggle still held'
-);
-
-TEST_FINISHED();]]></ST>
-      </Implementation>
-    </Method>
-    <Method Name="NoToggleKeepsCurrentState" Id="{3f7c2d53-b707-4069-ae01-d00505e72865}">
-      <Declaration><![CDATA[METHOD NoToggleKeepsCurrentState
+    <Method Name="HeldToggleDoesNotRetrigger" Id="{371fc64a-d964-4d52-8a5d-8e401ded155e}">
+      <Declaration><![CDATA[METHOD PRIVATE HeldToggleDoesNotRetrigger
 VAR
     fbLight : FB_Light;
-END_VAR
-]]></Declaration>
-      <Implementation>
-        <ST><![CDATA[TEST('No toggle keeps current state');
-
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Held toggle does not retrigger');
+fbLight.bToggle := TRUE;
+fbLight();
+fbLight();
+AssertTrue(Condition := fbLight.bOn, Message := 'Held toggle should only turn the light on once');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ToggleRearminAfterRelease" Id="{24b4f532-0e77-41d4-a348-8c3d6b490c41}">
+      <Declaration><![CDATA[METHOD PRIVATE ToggleRearminAfterRelease
+VAR
+    fbLight : FB_Light;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Toggle rearms after release');
+fbLight.bToggle := TRUE;
+fbLight();
 fbLight.bToggle := FALSE;
 fbLight();
-
-AssertFalse(
-    Condition := fbLight.bOn,
-    Message := 'Light should remain OFF without toggle'
-);
-
-TEST_FINISHED();]]></ST>
-      </Implementation>
+fbLight.bToggle := TRUE;
+fbLight();
+AssertFalse(Condition := fbLight.bOn, Message := 'A new rising edge should turn the light off');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="SetRequestsForceState" Id="{947ee51d-6209-4674-b58d-0491d1856139}">
+      <Declaration><![CDATA[METHOD PRIVATE SetRequestsForceState
+VAR
+    fbLight : FB_Light;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Set requests force state');
+fbLight.bSetValid := TRUE;
+fbLight.bSetOn := TRUE;
+fbLight();
+AssertTrue(Condition := fbLight.bOn, Message := 'Valid ON request should turn light on');
+fbLight.bSetOn := FALSE;
+fbLight();
+AssertFalse(Condition := fbLight.bOn, Message := 'Valid OFF request should turn light off');
+fbLight.bSetValid := FALSE;
+fbLight.bSetOn := TRUE;
+fbLight();
+AssertFalse(Condition := fbLight.bOn, Message := 'Invalid set request should be ignored');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ToggleWinsOverSetRequest" Id="{87a1a087-3516-4a42-a79b-aa437ee90c5f}">
+      <Declaration><![CDATA[METHOD PRIVATE ToggleWinsOverSetRequest
+VAR
+    fbLight : FB_Light;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Toggle wins over set request');
+fbLight.bToggle := TRUE;
+fbLight.bSetValid := TRUE;
+fbLight.bSetOn := FALSE;
+fbLight();
+AssertTrue(Condition := fbLight.bOn, Message := 'Toggle should win over simultaneous set OFF request');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="IndependentLightsKeepIndependentState" Id="{62fa420d-cd87-47fc-a5c8-970cf7f5848f}">
+      <Declaration><![CDATA[METHOD PRIVATE IndependentLightsKeepIndependentState
+VAR
+    fbLight1 : FB_Light;
+    fbLight2 : FB_Light;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Independent lights keep independent state');
+fbLight1.bToggle := TRUE;
+fbLight1();
+fbLight2();
+AssertTrue(Condition := fbLight1.bOn, Message := 'First light should be on');
+AssertFalse(Condition := fbLight2.bOn, Message := 'Second light should remain off');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="NoToggleKeepsCurrentState" Id="{3f7c2d53-b707-4069-ae01-d00505e72865}">
+      <Declaration><![CDATA[METHOD PRIVATE NoToggleKeepsCurrentState
+VAR
+    fbLight : FB_Light;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('No toggle keeps current state');
+fbLight();
+AssertFalse(Condition := fbLight.bOn, Message := 'Light should remain OFF without toggle');
+TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="SecondToggleTurnsLightOff" Id="{8b0859e6-a360-4010-b172-3025a975b5c7}">
       <Declaration><![CDATA[METHOD PRIVATE SecondToggleTurnsLightOff
 VAR
     fbLight : FB_Light;
 END_VAR]]></Declaration>
-      <Implementation>
-        <ST><![CDATA[TEST('Second toggle turns light off');
-
+      <Implementation><ST><![CDATA[TEST('Second toggle turns light off');
 fbLight.bToggle := TRUE;
 fbLight();
-
 fbLight.bToggle := FALSE;
 fbLight();
-
 fbLight.bToggle := TRUE;
 fbLight();
-
-AssertFalse(
-    Condition := fbLight.bOn,
-    Message := 'Light should be OFF after second toggle'
-);
-
-TEST_FINISHED();]]></ST>
-      </Implementation>
+AssertFalse(Condition := fbLight.bOn, Message := 'Second toggle should turn light off');
+TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="ToggleTurnsLightOn" Id="{0219653a-ebc7-4f44-b312-192b3fedd447}">
       <Declaration><![CDATA[METHOD PRIVATE ToggleTurnsLightOn
 VAR
     fbLight : FB_Light;
 END_VAR]]></Declaration>
-      <Implementation>
-        <ST><![CDATA[TEST('Toggle turns light on');
-
+      <Implementation><ST><![CDATA[TEST('Toggle turns light on');
 fbLight.bToggle := TRUE;
 fbLight();
-
-AssertTrue(
-    Condition := fbLight.bOn,
-    Message := 'Light should be ON after toggle'
-);
-
-TEST_FINISHED();]]></ST>
-      </Implementation>
+AssertTrue(Condition := fbLight.bOn, Message := 'Toggle should turn light on');
+TEST_FINISHED();]]></ST></Implementation>
     </Method>
   </POU>
 </TcPlcObject>

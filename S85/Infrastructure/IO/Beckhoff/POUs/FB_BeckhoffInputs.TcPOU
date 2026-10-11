@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_BeckhoffInputs" Id="{18a4e52f-43a1-4e17-a47b-90a6c6b8e9f3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_BeckhoffInputs
+VAR_OUTPUT
+    stInputs : ST_HomeInputs;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[{IF defined (S85_HW)}
+stInputs.aButtons[GVL_WorkshopConfig.stMainLight.nButtonIndex] := GVL_BeckhoffIO.bWorkshopMainButton;
+{END_IF}]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -51,3 +51,7 @@ LineIDs.dbg.bak
 # Windows
 Thumbs.db
 Desktop.ini
+
+# Local MQTT configuration and secrets (keep .example templates trackable)
+/config/*.conf
+/config/*.secrets.conf

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_MqttLightEntity" Id="{03948ad4-29d2-47e0-8149-b775290eea37}">
+    <Declaration><![CDATA[TYPE ST_MqttLightEntity :
+STRUCT
+    nHandle : UINT;
+    sCommandTopic : STRING(128);
+    sStateTopic : STRING(128);
+    sDiscoveryTopic : STRING(128);
+    sUniqueId : STRING(128);
+    sDiscoveryPayload : STRING(1024);
+    nDiscoverySize : UDINT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

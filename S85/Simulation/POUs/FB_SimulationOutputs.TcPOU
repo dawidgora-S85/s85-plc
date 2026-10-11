@@ -6,13 +6,31 @@ VAR_INPUT
     stOutputs : ST_HomeOutputs;
 END_VAR
 
+VAR_OUTPUT
+    bWorkshopMainLightRelay : BOOL;
+END_VAR
+
 VAR
-    bDummyRoomLight1Relay : BOOL;
-    bDummyRoomLight2Relay : BOOL;
+    nMainHandle : UINT := 0;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[bDummyRoomLight1Relay := stOutputs.DummyRoom.bLight1;
-bDummyRoomLight2Relay := stOutputs.DummyRoom.bLight2;]]></ST>
+        <ST><![CDATA[bWorkshopMainLightRelay := FALSE;
+IF nMainHandle >= 1 AND nMainHandle <= GVL_HomeLimits.cMaxLights THEN
+    IF stOutputs.aLights[nMainHandle].bValid THEN
+        bWorkshopMainLightRelay := stOutputs.aLights[nMainHandle].bOn;
+    END_IF
+END_IF]]></ST>
     </Implementation>
+    <Method Name="BindCatalog" Id="{18627f6e-38ba-4448-b96a-9aa57998443c}">
+      <Declaration><![CDATA[METHOD PUBLIC BindCatalog : BOOL
+VAR_IN_OUT
+    fbCatalog : FB_LightCatalog;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nMainHandle := fbCatalog.FindLight(
+    sLocationCode := GVL_WorkshopConfig.stMainLight.sLocationCode,
+    sId := GVL_WorkshopConfig.stMainLight.sId
+);
+BindCatalog := nMainHandle <> 0;]]></ST></Implementation>
+    </Method>
   </POU>
 </TcPlcObject>

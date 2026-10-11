@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_LightCommand" Id="{60bcb23a-88c4-4222-baa8-3b0937aa8ff1}">
+    <Declaration><![CDATA[TYPE ST_LightCommand :
+STRUCT
+    bValid : BOOL;
+    bOn : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
