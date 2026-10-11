@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttCanaryParserTests" Id="{c913ba10-565b-4a23-aafe-7f5894fe0310}" SpecialFunc="None">
+    <Declaration><![CDATA[{attribute 'no_assign'}
+FUNCTION_BLOCK FB_MqttCanaryParserTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[AcceptsSyntheticCanaryAndAppliesOnlyAfterBothFiles();
+RejectsMissingDuplicateAndWrongKeys();
+RejectsEmptyConfigAndSecretValues();
+RejectsOversizedUnsupportedAndUnterminatedInput();
+RejectsCANANYModeAndSecretPrefix();
+Accepts255ByteCredentialAndRejects256ByteCredential();
+RejectsDuplicateCredentialAndUnknownKey();
+FailedSecretsParseLeavesClientUntouched();
+ClearPreventsLaterApply();]]></ST></Implementation>
+    <Method Name="AcceptsSyntheticCanaryAndAppliesOnlyAfterBothFiles" Id="{c913ba10-565b-4a23-aafe-7f5894fe0311}">
+      <Declaration><![CDATA[METHOD PRIVATE AcceptsSyntheticCanaryAndAppliesOnlyAfterBothFiles
+VAR
+    fbParser : FB_MqttCanaryParser;
+    fbClient : FB_IotMqtt5Client;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Only complete synthetic canary files apply configuration to the client');
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false$R$N';
+nSize := LEN2(ADR(sData));
+nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Valid config file should parse');
+AssertFalse(Condition := fbParser.bReady, Message := 'One file alone must not make parser ready');
+fbClient.sHostName := 'untouched.invalid'; fbClient.nHostPort := 1234;
+AssertFalse(Condition := fbParser.ApplyToClient(fbClient := fbClient), Message := 'Client must not be applied before secrets are parsed');
+AssertTrue(Condition := (fbClient.sHostName = 'untouched.invalid') AND (fbClient.nHostPort = 1234), Message := 'Early apply must not modify client');
+sData := '# synthetic test only$R$NMQTT_USERNAME=CANARY-test=user#tag$R$NMQTT_PASSWORD=CANARY-test=pass#marker$R$N';
+nSize := LEN2(ADR(sData));
+nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Synthetic secrets with literal equals and hash should parse');
+AssertTrue(Condition := fbParser.bReady AND NOT fbParser.bError, Message := 'Both validated files should set ready');
+AssertTrue(Condition := fbParser.ApplyToClient(fbClient := fbClient), Message := 'Ready parser should apply staged credentials');
+AssertTrue(Condition := (fbClient.sHostName = 'canary.invalid') AND (fbClient.nHostPort = 1883), Message := 'Canary host and port should be applied');
+AssertTrue(Condition := fbClient.sUserName = 'CANARY-test=user#tag', Message := 'Synthetic username should be applied exactly');
+AssertTrue(Condition := fbClient.sUserPassword = 'CANARY-test=pass#marker', Message := 'Synthetic password should be applied exactly');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectsMissingDuplicateAndWrongKeys" Id="{c913ba10-565b-4a23-aafe-7f5894fe0312}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectsMissingDuplicateAndWrongKeys
+VAR
+    fbParser : FB_MqttCanaryParser;
+    fbClient : FB_IotMqtt5Client;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Missing duplicate and wrong-file keys fail closed');
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Missing required TLS key must fail');
+AssertTrue(Condition := fbParser.bError AND NOT fbParser.bReady, Message := 'Missing-key config must remain not ready');
+fbClient.sHostName := 'unchanged.invalid';
+AssertFalse(Condition := fbParser.ApplyToClient(fbClient := fbClient), Message := 'Failed parse must not apply');
+AssertTrue(Condition := fbClient.sHostName = 'unchanged.invalid', Message := 'Failed parse must leave client untouched');
+
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Duplicate key must fail');
+
+fbParser.Begin();
+sData := 'MQTT_USERNAME=CANARY-user$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Secrets key in config file must fail');
+
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Config should parse before checking missing secret');
+sData := 'MQTT_USERNAME=CANARY-user$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Missing password must fail');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectsEmptyConfigAndSecretValues" Id="{c913ba10-565b-4a23-aafe-7f5894fe0314}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectsEmptyConfigAndSecretValues
+VAR
+    fbParser : FB_MqttCanaryParser;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Empty config and secret values fail closed without becoming ready');
+fbParser.Begin();
+sData := 'MQTT_MODE=$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Empty config value must fail');
+AssertTrue(Condition := fbParser.bError AND NOT fbParser.bReady, Message := 'Empty config value must fail closed');
+
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Valid synthetic config should parse');
+sData := 'MQTT_USERNAME=$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Empty secret value must fail');
+AssertTrue(Condition := fbParser.bError AND NOT fbParser.bReady, Message := 'Empty secret value must fail closed');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectsOversizedUnsupportedAndUnterminatedInput" Id="{c913ba10-565b-4a23-aafe-7f5894fe0313}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectsOversizedUnsupportedAndUnterminatedInput
+VAR
+    fbParser : FB_MqttCanaryParser;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+    nIndex : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Overlong lines unsupported bytes and missing final CRLF are rejected');
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Nonempty final line without CRLF must fail');
+
+fbParser.Begin();
+FOR nIndex := 0 TO 299 DO aBytes[nIndex] := 65; END_FOR
+aBytes[300] := 13; aBytes[301] := 10;
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := 302, aBytes := aBytes), Message := 'Logical line longer than 288 bytes must fail');
+
+fbParser.Begin();
+aBytes[0] := 255;
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := 1, aBytes := aBytes), Message := 'Non-ASCII bytes must fail');
+AssertTrue(Condition := fbParser.bError AND NOT fbParser.bReady, Message := 'Invalid bytes must not produce a ready parser');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectsCANANYModeAndSecretPrefix" Id="{c913ba10-565b-4a23-aafe-7f5894fe0315}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectsCANANYModeAndSecretPrefix
+VAR
+    fbParser : FB_MqttCanaryParser;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('CANANY is not accepted as a CANARY mode or credential prefix');
+fbParser.Begin();
+sData := 'MQTT_MODE=CANANY$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'CANANY mode must be rejected');
+
+fbParser.Begin();
+sData := 'MQTT_USERNAME=CANANY-user$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'CANANY secret prefix must be rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="Accepts255ByteCredentialAndRejects256ByteCredential" Id="{c913ba10-565b-4a23-aafe-7f5894fe0316}">
+      <Declaration><![CDATA[METHOD PRIVATE Accepts255ByteCredentialAndRejects256ByteCredential
+VAR
+    fbParser : FB_MqttCanaryParser;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+    nIndex : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Credential length limit accepts 255 bytes and rejects 256 bytes');
+fbParser.Begin();
+sData := 'MQTT_USERNAME=CANARY-';
+FOR nIndex := 1 TO 248 DO sData := CONCAT(sData, 'A'); END_FOR
+sData := CONCAT(sData, '$R$NMQTT_PASSWORD=CANARY-short$R$N');
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := '255-byte credential should be accepted');
+
+fbParser.Begin();
+sData := 'MQTT_USERNAME=CANARY-';
+FOR nIndex := 1 TO 249 DO sData := CONCAT(sData, 'A'); END_FOR
+sData := CONCAT(sData, '$R$N');
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := '256-byte credential should be rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectsDuplicateCredentialAndUnknownKey" Id="{c913ba10-565b-4a23-aafe-7f5894fe0317}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectsDuplicateCredentialAndUnknownKey
+VAR
+    fbParser : FB_MqttCanaryParser;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Duplicate credentials and unknown keys are rejected');
+fbParser.Begin();
+sData := 'MQTT_USERNAME=CANARY-user$R$NMQTT_USERNAME=CANARY-other$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Duplicate credential must be rejected');
+
+fbParser.Begin();
+sData := 'MQTT_EXTRA=CANARY-value$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Unknown secret key must be rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="FailedSecretsParseLeavesClientUntouched" Id="{c913ba10-565b-4a23-aafe-7f5894fe0318}">
+      <Declaration><![CDATA[METHOD PRIVATE FailedSecretsParseLeavesClientUntouched
+VAR
+    fbParser : FB_MqttCanaryParser;
+    fbClient : FB_IotMqtt5Client;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Failed secrets parse does not modify any client configuration');
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Synthetic config should parse');
+fbClient.sHostName := 'untouched.invalid'; fbClient.nHostPort := 4321;
+fbClient.sUserName := 'CANARY-sentinel-user'; fbClient.sUserPassword := 'CANARY-sentinel-pass';
+sData := 'MQTT_USERNAME=CANANY-user$R$NMQTT_PASSWORD=CANARY-pass$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertFalse(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Invalid secret prefix must fail');
+AssertFalse(Condition := fbParser.ApplyToClient(fbClient := fbClient), Message := 'Failed secrets parse must not apply');
+AssertTrue(Condition := (fbClient.sHostName = 'untouched.invalid') AND (fbClient.nHostPort = 4321) AND (fbClient.sUserName = 'CANARY-sentinel-user') AND (fbClient.sUserPassword = 'CANARY-sentinel-pass'), Message := 'Failed secrets parse must leave client untouched');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ClearPreventsLaterApply" Id="{c913ba10-565b-4a23-aafe-7f5894fe0319}">
+      <Declaration><![CDATA[METHOD PRIVATE ClearPreventsLaterApply
+VAR
+    fbParser : FB_MqttCanaryParser;
+    fbClient : FB_IotMqtt5Client;
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sData : STRING(512);
+    nSize : UDINT;
+    nCopied : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Clear removes staged credentials and prevents later apply');
+fbParser.Begin();
+sData := 'MQTT_MODE=CANARY$R$NMQTT_HOST=canary.invalid$R$NMQTT_PORT=1883$R$NMQTT_TLS=false$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 1, nBytes := nSize, aBytes := aBytes), Message := 'Synthetic config should parse');
+sData := 'MQTT_USERNAME=CANARY-test-user$R$NMQTT_PASSWORD=CANARY-test-pass$R$N';
+nSize := LEN2(ADR(sData)); nCopied := MEMCPY(ADR(aBytes), ADR(sData), nSize);
+AssertTrue(Condition := fbParser.ParseFile(nFileKind := 2, nBytes := nSize, aBytes := aBytes), Message := 'Synthetic secrets should parse');
+fbClient.sHostName := 'untouched.invalid'; fbClient.nHostPort := 4321;
+fbClient.sUserName := 'CANARY-sentinel-user'; fbClient.sUserPassword := 'CANARY-sentinel-pass';
+fbParser.Clear();
+AssertFalse(Condition := fbParser.ApplyToClient(fbClient := fbClient), Message := 'Cleared parser must not apply');
+AssertTrue(Condition := (fbClient.sHostName = 'untouched.invalid') AND (fbClient.nHostPort = 4321) AND (fbClient.sUserName = 'CANARY-sentinel-user') AND (fbClient.sUserPassword = 'CANARY-sentinel-pass'), Message := 'Clear must leave client untouched');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

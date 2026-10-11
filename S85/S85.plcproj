@@ -70,6 +70,12 @@
     <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttIntegration.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttCanaryParser.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttCanaryFileLoader.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttLightBuilder.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -101,6 +107,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Tests\Infrastructure\Integrations\MQTT\POUs\FB_MqttLightProtocolTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Infrastructure\Integrations\MQTT\POUs\FB_MqttCanaryParserTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Tests\PRG_Tests.TcPOU">

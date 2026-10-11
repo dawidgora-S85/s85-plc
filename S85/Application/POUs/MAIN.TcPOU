@@ -9,7 +9,12 @@ VAR
     fbSimulationOutputs : FB_SimulationOutputs;
     fbBeckhoffInputs : FB_BeckhoffInputs;
     fbBeckhoffOutputs : FB_BeckhoffOutputs;
+{IF defined (S85_MQTT_CANARY)}
+    {attribute 'TcNoSymbol'}
     fbMqtt : FB_MqttIntegration;
+{ELSE}
+    fbMqtt : FB_MqttIntegration;
+{END_IF}
 
     stInputs : ST_HomeInputs;
     stOutputs : ST_HomeOutputs;
@@ -17,10 +22,29 @@ VAR
     bCatalogReady : BOOL := FALSE;
     bOutputBound : BOOL := FALSE;
     bMqttInitialized : BOOL := FALSE;
+{IF defined (S85_MQTT_CANARY)}
+    bCanaryLoaded : BOOL;
+    nCanaryErrorCode : UDINT;
+{END_IF}
     i : UINT;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[{IF defined (S85_SIM)}
+      <ST><![CDATA[{IF defined (S85_MQTT_CANARY)}
+{IF defined (S85_SIM)}
+{ELSE}
+{error 'S85_MQTT_CANARY requires S85_SIM'}
+{END_IF}
+{IF defined (S85_HW)}
+{error 'S85_MQTT_CANARY cannot be combined with S85_HW'}
+{END_IF}
+{IF defined (S85_PROD)}
+{error 'S85_MQTT_CANARY cannot be combined with S85_PROD'}
+{END_IF}
+{IF defined (S85_TEST_BUILD)}
+{error 'S85_MQTT_CANARY cannot be combined with S85_TEST_BUILD'}
+{END_IF}
+{END_IF}
+{IF defined (S85_SIM)}
 {IF defined (S85_HW)}
 {error 'Define exactly one of S85_SIM or S85_HW'}
 {END_IF}
@@ -81,7 +105,11 @@ IF bCatalogReady AND bOutputBound THEN
     {ELSE}
     (* Commands received in the previous MQTT scan are consumed exactly once. *)
     IF bMqttInitialized THEN
+        {IF defined (S85_MQTT_CANARY)}
+        fbMqtt.ApplyPendingCommands(stInputs := stInputs, bAllowed := FALSE);
+        {ELSE}
         fbMqtt.ApplyPendingCommands(stInputs := stInputs, bAllowed := TRUE);
+        {END_IF}
     END_IF
     {END_IF}
     fbHome(
@@ -115,6 +143,10 @@ fbMqtt.Cycle(
     nHostPort := 0,
     bConfigurationReady := FALSE
 );
+{IF defined (S85_MQTT_CANARY)}
+bCanaryLoaded := fbMqtt.bCanaryLoaded;
+nCanaryErrorCode := fbMqtt.nCanaryErrorCode;
+{END_IF}
 {END_IF}
 
 {IF defined (S85_SIM)}

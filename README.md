@@ -38,24 +38,28 @@ Use only a nonproduction XAR:
 
 With `S85_TEST_BUILD` defined, the MQTT adapter is not run and workshop MQTT commands are disabled. Never use this definition for hardware or a production target.
 
-### Broker integration on SIM
+### Canary-first build stage (no broker connection)
 
-1. Leave `S85_TEST_BUILD` off and use a SIM/DEV target with Compile definitions `S85_SIM`.
-2. The adapter uses a fixed MQTT client ID `s85-plc` and shared fixed topics below. Use an isolated DEV/SIM broker and separate dedicated DEV/SIM credentials and ACLs. Never connect a test instance to a production broker.
-3. The checked-in MQTT integration is deliberately disabled. Do not attempt broker integration until a secure configuration source, credentials, and startup behavior have been implemented and validated for the target. An online write cannot provision credentials or enable MQTT in the checked-in build.
+The existing `S85_SIM` and `S85_SIM,S85_TEST_BUILD` builds remain broker-free. The proposed `S85_MQTT_CANARY` definition is a separate, nonproduction canary stage: use it only together with `S85_SIM`, and never together with `S85_TEST_BUILD`, `S85_HW`, or `S85_PROD`. This stage permits only direct PLC file loading of the canary configuration described below; it is not permission to connect to a broker. Keep the literal `bConnect := FALSE` in the canary build and verify that there is no broker traffic. Do not claim runtime loading or behavior works until it has been tested in XAE on the intended XAR.
+
+For the canary build, compile definitions must be exactly `S85_SIM,S85_MQTT_CANARY`. Use a SIM/DEV XAR only. Inspect ADS-visible symbols, the generated `.tmc`, and boot/export artifacts with synthetic canary values. Confirm that neither username nor password is included in symbols or exported/boot artifacts; `TcNoSymbol` is not guaranteed to hide credential memory, and library FB internals may expose retained credentials. If any value is exposed, stop and do not enable a connection.
+
+There is no live authentication in this stage. A later live test requires credentials rotated to a dedicated SIM-only account, a narrowly scoped ACL, an isolated network, completed target/runtime security checks, and separate explicit approval. Port 1883 without TLS is permitted only as a later, explicitly approved isolated-lab exception: credentials and traffic are plaintext and can be observed on the network. Do not use real credentials for the canary stage.
 
 ## MQTT configuration and credential security
 
-The files under `config/` are examples of a proposed plain UTF-8 ASCII `KEY=value` format only. They are not a runtime configuration interface: the PLC does not currently load these files, and no TwinCAT credential-file API or loader has been implemented or verified. Do not treat copying these files to a target as configuration. `Tc3_IotBase` (TF6701) documentation does not establish that `/etc/...` paths work on the target or provide a documented credential-file API. TLS support, CA-file path support, and startup configuration must be validated on the actual target; TLS is preferred, not assumed to work.
+The generic files under `config/` remain examples for future integration; the PLC does not load them. The `mqtt.canary*.conf.example` files contain synthetic placeholders for the canary build only. That build now includes a PLC file loader, but its compilation and startup behavior still need XAE validation. TF6701 does not read these files directly. The `/etc/...` paths and file API behavior on the Linux target remain unverified. TLS and CA-file path support also require target validation.
 
-The proposed target paths are:
+For Windows XAR canary tests, manually provision these target-local paths outside the repository and outside XAE boot/export:
 
-- Nonsecret configuration: `/etc/s85/config/mqtt.conf`
-- Credentials: `/etc/s85/secrets/mqtt.conf`
+- Nonsecret configuration: `C:\ProgramData\S85\sim\config\mqtt.conf`
+- Credentials: `C:\ProgramData\S85\sim\secrets\mqtt.conf`
 
-Keep separate DEV/SIM and PROD configuration and credentials outside the repository. Use a dedicated MQTT ACL user for each environment, restrict it to required topics, and prefer TLS with certificate verification. Never put secrets in Git, PLC symbols, logs, or the HMI. The example host and credentials are placeholders only. The example CA path `/etc/s85/certs/mqtt-ca.pem` is illustrative; path support is unverified.
+The canary nonsecret file must contain exactly these required keys and values, one per line: `MQTT_MODE=CANARY`, `MQTT_HOST=canary.invalid`, `MQTT_PORT=1883`, and `MQTT_TLS=false`. The secrets file must contain exactly `MQTT_USERNAME=CANARY-<locally-chosen-suffix>` and `MQTT_PASSWORD=CANARY-<different-locally-chosen-suffix>`. Choose distinct synthetic suffixes locally. Never use or copy a real password from conversation, and never put real secrets in Git, PLC symbols, logs, or the HMI. Each file is narrow ASCII `KEY=value` with CRLF line endings, at most 2048 bytes, no unknown keys, and no duplicate keys. The optional tracked templates contain placeholders only and are not target-ready files.
 
-Before any deployment, fail closed if a validated secure configuration source is absent. First implement and validate how the runtime obtains host, port, TLS/CA settings, and credentials without exposing credentials in PLC symbols or other artifacts. In Windows XAE, inspect the generated `.tmc`, ADS-visible symbols, and boot artifacts to verify that credentials are not exposed. On the target, verify the actual TwinCAT runtime uid/gid and access to the configured files. Create the directories manually; use root/admin ownership only if runtime access is verified. Restrict the secrets directory to `0700` or appropriate group traversal, and the secret file to `0600` only when its owner and runtime access have been verified. Nonsecret config may be `0644` when appropriate. Validate permissions, TLS certificate verification, configuration parsing, startup, and restart behavior on the intended nonproduction target before considering production. Do not deploy until parent XAE evidence and these security checks are complete.
+Provision manually on the Windows target using a local editor: create the directories and files directly at the paths above, without pasting real secrets into chat, a command line, or shell/PowerShell history. Verify the XAR account and ACLs permit only the intended runtime access before testing. Keep all real DEV/SIM and PROD configuration and credentials target-local and separate. For a later live test, use a dedicated account/ACL and prefer TLS with certificate verification; the example CA path in the generic template is illustrative and path support is unverified.
+
+For stage A, build with synthetic canary values only, inspect ADS/TMC/boot artifacts, and verify the literal `bConnect := FALSE` and absence of broker traffic. Do not infer secrecy from `TcNoSymbol`: credentials held in memory or by library FBs may not be hidden. The Linux CX file API, paths, runtime account, and permissions remain unverified. No live authentication is allowed until credentials have been rotated to a dedicated SIM account on an isolated network and separate approval is obtained. Before any later deployment, fail closed if a validated secure configuration source is absent; validate actual file access and permissions on the intended target, and inspect generated artifacts. Do not deploy until XAE evidence and security checks are complete.
 
 ## Hardware / production preparation
 

@@ -1,0 +1,4 @@
+MQTT_MODE=CANARY
+MQTT_HOST=canary.invalid
+MQTT_PORT=1883
+MQTT_TLS=false

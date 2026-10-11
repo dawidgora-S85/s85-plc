@@ -9,6 +9,10 @@ VAR_OUTPUT
     hrErrorCode : HRESULT;
     bInitialized : BOOL;
     nEntityCount : UINT;
+{IF defined (S85_MQTT_CANARY)}
+    bCanaryLoaded : BOOL;
+    nCanaryErrorCode : UDINT;
+{END_IF}
 END_VAR
 VAR CONSTANT
     cQueueDepthLimit : UDINT := 64;
@@ -18,7 +22,14 @@ END_VAR
 VAR
     aEntities : ARRAY[1..GVL_HomeLimits.cMaxLights] OF ST_MqttLightEntity;
     fbBuilder : FB_MqttLightBuilder;
+{IF defined (S85_MQTT_CANARY)}
+    {attribute 'TcNoSymbol'}
     fbClient : FB_IotMqtt5Client;
+    {attribute 'TcNoSymbol'}
+    fbCanaryLoader : FB_MqttCanaryFileLoader;
+{ELSE}
+    fbClient : FB_IotMqtt5Client;
+{END_IF}
     fbMessage : FB_IotMqtt5Message;
     fbProtocol : FB_MqttLightProtocol;
     fbSubscribeProperties : FB_IotMqtt5SubscribeProperties;
@@ -113,7 +124,18 @@ VAR_INPUT
     nHostPort : UINT;
     bConfigurationReady : BOOL;
 END_VAR]]></Declaration>
-      <Implementation><ST><![CDATA[bConnected := FALSE;
+      <Implementation><ST><![CDATA[{IF defined (S85_MQTT_CANARY)}
+fbCanaryLoader.Step(fbClient := fbClient);
+fbClient.Execute(bConnect := FALSE);
+bConnected := FALSE;
+bSubscriptionsReady := FALSE;
+bMessageAvailable := FALSE;
+bCanaryLoaded := fbCanaryLoader.bLoaded;
+nCanaryErrorCode := fbCanaryLoader.nErrorCode;
+bError := fbCanaryLoader.bError;
+hrErrorCode := 0;
+{ELSE}
+bConnected := FALSE;
 bError := FALSE;
 hrErrorCode := 0;
 bMessageAvailable := FALSE;
@@ -290,7 +312,8 @@ IF bQueueResetComplete THEN
     bForceReset := FALSE;
     bQueueResetComplete := FALSE;
 END_IF
-IF NOT bConfigurationValid THEN bConnected := FALSE; bSubscriptionsReady := FALSE; END_IF]]></ST></Implementation>
+IF NOT bConfigurationValid THEN bConnected := FALSE; bSubscriptionsReady := FALSE; END_IF
+{END_IF}]]></ST></Implementation>
     </Method>
   </POU>
 </TcPlcObject>

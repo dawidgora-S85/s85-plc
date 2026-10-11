@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttCanaryFileLoader" Id="{7d32c66a-4d91-4c14-9906-17717a04b001}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttCanaryFileLoader
+VAR_OUTPUT
+    bLoaded : BOOL;
+    bError : BOOL;
+    nErrorCode : UDINT;
+    nAdsErrorCode : UDINT;
+END_VAR
+VAR CONSTANT
+    cStateInit : USINT := 0;
+    cStateOpenConfigStart : USINT := 1;
+    cStateOpenConfigWait : USINT := 2;
+    cStateReadConfigStart : USINT := 3;
+    cStateReadConfigWait : USINT := 4;
+    cStateCloseConfigStart : USINT := 5;
+    cStateCloseConfigWait : USINT := 6;
+    cStateParseConfig : USINT := 7;
+    cStateParseSecrets : USINT := 8;
+    cStateApply : USINT := 9;
+    cStateClearSuccess : USINT := 10;
+    cStateFaultCloseStart : USINT := 11;
+    cStateFaultCloseWait : USINT := 12;
+    cStateFaultCleanup : USINT := 13;
+    cStateDone : USINT := 14;
+    cStateFault : USINT := 15;
+    cErrorOpen : UDINT := 1;
+    cErrorRead : UDINT := 2;
+    cErrorTooLarge : UDINT := 4;
+    cErrorParse : UDINT := 5;
+    cErrorApply : UDINT := 6;
+    cErrorCleanupUnconfirmed : UDINT := 7;
+    cConfigPath : STRING(64) := 'C:\ProgramData\S85\sim\config\mqtt.conf';
+    cSecretsPath : STRING(64) := 'C:\ProgramData\S85\sim\secrets\mqtt.conf';
+    cMaxReadChunk : UDINT := 256;
+END_VAR
+VAR
+    {attribute 'TcNoSymbol'}
+    fbParser : FB_MqttCanaryParser;
+    fbFileOpen : FB_FileOpen;
+    fbFileRead : FB_FileRead;
+    fbFileClose : FB_FileClose;
+    {attribute 'TcNoSymbol'}
+    aBytes : ARRAY[0..2048] OF BYTE;
+    sNetId : T_AmsNetId := '';
+    hFile : UINT;
+    nState : USINT := cStateInit;
+    nFileKind : USINT;
+    nBytes : UDINT;
+    nRequested : UDINT;
+    nWritten : UDINT;
+    bHandleValid : BOOL;
+    nFailureCode : UDINT;
+    nFailureAdsCode : UDINT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="Step" Id="{7d32c66a-4d91-4c14-9906-17717a04b002}">
+      <Declaration><![CDATA[METHOD PUBLIC Step
+VAR_IN_OUT
+    fbClient : FB_IotMqtt5Client;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[CASE nState OF
+    cStateInit:
+        bLoaded := FALSE;
+        bError := FALSE;
+        nErrorCode := 0;
+        nAdsErrorCode := 0;
+        nFileKind := 1;
+        nBytes := 0;
+        bHandleValid := FALSE;
+        nFailureCode := 0;
+        nFailureAdsCode := 0;
+        fbParser.Begin();
+        nState := cStateOpenConfigStart;
+
+    cStateOpenConfigStart:
+        IF nFileKind = 1 THEN
+            fbFileOpen(sNetId := sNetId, sPathName := cConfigPath, nMode := FOPEN_MODEREAD OR FOPEN_MODEBINARY, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
+        ELSE
+            fbFileOpen(sNetId := sNetId, sPathName := cSecretsPath, nMode := FOPEN_MODEREAD OR FOPEN_MODEBINARY, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
+        END_IF
+        nState := cStateOpenConfigWait;
+
+    cStateOpenConfigWait:
+        IF nFileKind = 1 THEN
+            fbFileOpen(sNetId := sNetId, sPathName := cConfigPath, nMode := FOPEN_MODEREAD OR FOPEN_MODEBINARY, ePath := PATH_GENERIC, bExecute := FALSE, tTimeout := T#5S);
+        ELSE
+            fbFileOpen(sNetId := sNetId, sPathName := cSecretsPath, nMode := FOPEN_MODEREAD OR FOPEN_MODEBINARY, ePath := PATH_GENERIC, bExecute := FALSE, tTimeout := T#5S);
+        END_IF
+        IF NOT fbFileOpen.bBusy THEN
+            IF fbFileOpen.bError THEN
+                bError := TRUE; nErrorCode := cErrorOpen; nAdsErrorCode := fbFileOpen.nErrId;
+                nState := cStateFaultCleanup;
+            ELSE
+                hFile := fbFileOpen.hFile;
+                bHandleValid := TRUE;
+                nBytes := 0;
+                nState := cStateReadConfigStart;
+            END_IF
+        END_IF
+
+    cStateReadConfigStart:
+        IF nBytes < 2048 THEN
+            nRequested := 2048 - nBytes;
+            IF nRequested > cMaxReadChunk THEN nRequested := cMaxReadChunk; END_IF
+        ELSE
+            nRequested := 1;
+        END_IF
+        fbFileRead(sNetId := sNetId, hFile := hFile, pReadBuff := ADR(aBytes[nBytes]), cbReadLen := nRequested, bExecute := TRUE, tTimeout := T#5S);
+        nState := cStateReadConfigWait;
+
+    cStateReadConfigWait:
+        fbFileRead(sNetId := sNetId, hFile := hFile, pReadBuff := ADR(aBytes[nBytes]), cbReadLen := nRequested, bExecute := FALSE, tTimeout := T#5S);
+        IF NOT fbFileRead.bBusy THEN
+            IF fbFileRead.bError THEN
+                nFailureCode := cErrorRead; nFailureAdsCode := fbFileRead.nErrId;
+                nState := cStateFaultCloseStart;
+            ELSIF fbFileRead.cbRead > nRequested THEN
+                nFailureCode := cErrorRead; nFailureAdsCode := 0;
+                nState := cStateFaultCloseStart;
+            ELSIF fbFileRead.cbRead = 0 THEN
+                IF fbFileRead.bEOF THEN
+                    nState := cStateCloseConfigStart;
+                ELSE
+                    nFailureCode := cErrorRead; nFailureAdsCode := 0;
+                    nState := cStateFaultCloseStart;
+                END_IF
+            ELSIF nBytes >= 2048 THEN
+                nFailureCode := cErrorTooLarge; nFailureAdsCode := 0;
+                nState := cStateFaultCloseStart;
+            ELSE
+                nBytes := nBytes + fbFileRead.cbRead;
+                nState := cStateReadConfigStart;
+            END_IF
+        END_IF
+
+    cStateCloseConfigStart:
+        fbFileClose(sNetId := sNetId, hFile := hFile, bExecute := TRUE, tTimeout := T#5S);
+        nState := cStateCloseConfigWait;
+
+    cStateCloseConfigWait:
+        fbFileClose(sNetId := sNetId, hFile := hFile, bExecute := FALSE, tTimeout := T#5S);
+        IF NOT fbFileClose.bBusy THEN
+            IF fbFileClose.bError THEN
+                bError := TRUE; nErrorCode := cErrorCleanupUnconfirmed; nAdsErrorCode := fbFileClose.nErrId;
+                nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+                fbParser.Clear();
+                nState := cStateFault;
+            ELSE
+                bHandleValid := FALSE;
+                IF nFileKind = 1 THEN nState := cStateParseConfig; ELSE nState := cStateParseSecrets; END_IF
+            END_IF
+        END_IF
+
+    cStateParseConfig:
+        IF NOT fbParser.ParseFile(nFileKind := 1, nBytes := nBytes, aBytes := aBytes) THEN
+            bError := TRUE; nErrorCode := cErrorParse; nAdsErrorCode := 0;
+            nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+            fbParser.Clear();
+            nState := cStateFault;
+        ELSE
+            nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+            nBytes := 0;
+            nFileKind := 2;
+            nState := cStateOpenConfigStart;
+        END_IF
+
+    cStateParseSecrets:
+        IF NOT fbParser.ParseFile(nFileKind := 2, nBytes := nBytes, aBytes := aBytes) THEN
+            bError := TRUE; nErrorCode := cErrorParse; nAdsErrorCode := 0;
+            nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+            fbParser.Clear();
+            nState := cStateFault;
+        ELSE
+            nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+            nState := cStateApply;
+        END_IF
+
+    cStateApply:
+        IF NOT fbParser.ApplyToClient(fbClient := fbClient) THEN
+            bError := TRUE; nErrorCode := cErrorApply; nAdsErrorCode := 0;
+            nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+            fbParser.Clear();
+            nState := cStateFault;
+        ELSE
+            nState := cStateClearSuccess;
+        END_IF
+
+    cStateClearSuccess:
+        nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+        fbParser.Clear();
+        bLoaded := TRUE;
+        nState := cStateDone;
+
+    cStateFaultCloseStart:
+        IF bHandleValid THEN
+            fbFileClose(sNetId := sNetId, hFile := hFile, bExecute := TRUE, tTimeout := T#5S);
+            nState := cStateFaultCloseWait;
+        ELSE
+            nState := cStateFaultCleanup;
+        END_IF
+
+    cStateFaultCloseWait:
+        fbFileClose(sNetId := sNetId, hFile := hFile, bExecute := FALSE, tTimeout := T#5S);
+        IF NOT fbFileClose.bBusy THEN
+            IF fbFileClose.bError THEN
+                bError := TRUE; nErrorCode := cErrorCleanupUnconfirmed; nAdsErrorCode := fbFileClose.nErrId;
+                bHandleValid := TRUE;
+                nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+                fbParser.Clear();
+                nState := cStateFault;
+            ELSE
+                bHandleValid := FALSE;
+                nState := cStateFaultCleanup;
+            END_IF
+        END_IF
+
+    cStateFaultCleanup:
+        IF NOT bError THEN bError := TRUE; nErrorCode := nFailureCode; nAdsErrorCode := nFailureAdsCode; END_IF
+        nWritten := MEMSET(ADR(aBytes), 0, SIZEOF(aBytes));
+        fbParser.Clear();
+        nState := cStateFault;
+
+    cStateDone, cStateFault:
+        (* Terminal states: no further file or network operations. *)
+END_CASE]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

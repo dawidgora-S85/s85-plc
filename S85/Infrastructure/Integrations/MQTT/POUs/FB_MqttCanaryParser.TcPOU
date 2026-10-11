@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttCanaryParser" Id="{c913ba10-565b-4a23-aafe-7f5894fe0301}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttCanaryParser
+VAR_OUTPUT
+    bReady : BOOL;
+    bError : BOOL;
+    nErrorCode : UDINT;
+END_VAR
+VAR
+    {attribute 'TcNoSymbol'}
+    aLine : ARRAY[0..288] OF BYTE;
+    {attribute 'TcNoSymbol'}
+    aKey : ARRAY[0..32] OF BYTE;
+    {attribute 'TcNoSymbol'}
+    aValue : ARRAY[0..255] OF BYTE;
+    {attribute 'TcNoSymbol'}
+    sKey : STRING(32);
+    nLineLength : UDINT;
+    nKeyLength : UDINT;
+    nValueLength : UDINT;
+    nConfigCount : USINT;
+    nSecretsCount : USINT;
+    nPortValue : UDINT;
+    nIndex : UDINT;
+    nWritten : UDINT;
+    bConfigParsed : BOOL;
+    bSecretsParsed : BOOL;
+    bConfigMode : BOOL;
+    bConfigHost : BOOL;
+    bConfigPort : BOOL;
+    bConfigTls : BOOL;
+    bSecretsUser : BOOL;
+    bSecretsPassword : BOOL;
+    bEqualsFound : BOOL;
+    {attribute 'TcNoSymbol'}
+    sStagedUserName : STRING(255);
+    {attribute 'TcNoSymbol'}
+    sStagedUserPassword : STRING(255);
+    sStagedHostName : STRING(255);
+    nStagedHostPort : UINT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="Begin" Id="{c913ba10-565b-4a23-aafe-7f5894fe0302}">
+      <Declaration><![CDATA[METHOD PUBLIC Begin]]></Declaration>
+      <Implementation><ST><![CDATA[Clear();
+bError := FALSE;
+nErrorCode := 0;]]></ST></Implementation>
+    </Method>
+    <Method Name="Clear" Id="{c913ba10-565b-4a23-aafe-7f5894fe0303}">
+      <Declaration><![CDATA[METHOD PUBLIC Clear]]></Declaration>
+      <Implementation><ST><![CDATA[bReady := FALSE;
+bConfigParsed := FALSE;
+bSecretsParsed := FALSE;
+bConfigMode := FALSE; bConfigHost := FALSE; bConfigPort := FALSE; bConfigTls := FALSE;
+bSecretsUser := FALSE; bSecretsPassword := FALSE;
+nConfigCount := 0; nSecretsCount := 0; nStagedHostPort := 0;
+sStagedHostName := '';
+nWritten := MEMSET(ADR(sStagedUserName), 0, SIZEOF(sStagedUserName));
+nWritten := MEMSET(ADR(sStagedUserPassword), 0, SIZEOF(sStagedUserPassword));
+nWritten := MEMSET(ADR(sKey), 0, SIZEOF(sKey));
+FOR nIndex := 0 TO 288 DO aLine[nIndex] := 0; END_FOR
+FOR nIndex := 0 TO 32 DO aKey[nIndex] := 0; END_FOR
+FOR nIndex := 0 TO 255 DO aValue[nIndex] := 0; END_FOR
+nLineLength := 0; nErrorCode := 0; bError := FALSE;]]></ST></Implementation>
+    </Method>
+    <Method Name="ParseFile" Id="{c913ba10-565b-4a23-aafe-7f5894fe0304}">
+      <Declaration><![CDATA[METHOD PUBLIC ParseFile : BOOL
+VAR_INPUT
+    nFileKind : USINT;
+    nBytes : UDINT;
+END_VAR
+VAR_IN_OUT CONSTANT
+    aBytes : ARRAY[0..2048] OF BYTE;
+END_VAR
+VAR
+    nByte : UDINT;
+    nCurrent : UDINT;
+    bSawCR : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ParseFile := FALSE;
+IF bError OR ((nFileKind <> 1) AND (nFileKind <> 2)) OR (nBytes > 2048) OR
+   ((nFileKind = 1) AND bConfigParsed) OR ((nFileKind = 2) AND bSecretsParsed) THEN
+    bError := TRUE; nErrorCode := 1; RETURN;
+END_IF
+bReady := FALSE; nLineLength := 0; bSawCR := FALSE;
+IF nBytes > 0 THEN
+    FOR nByte := 0 TO nBytes - 1 DO
+        nCurrent := aBytes[nByte];
+        IF bSawCR THEN
+            IF nCurrent <> 10 THEN bError := TRUE; nErrorCode := 2; RETURN; END_IF
+            IF NOT ProcessLine(nFileKind := nFileKind) THEN RETURN; END_IF
+            bSawCR := FALSE; nLineLength := 0;
+        ELSIF nCurrent = 13 THEN
+            bSawCR := TRUE;
+        ELSIF (nCurrent < 32) OR (nCurrent > 126) THEN
+            bError := TRUE; nErrorCode := 2; RETURN;
+        ELSE
+            IF nLineLength >= 288 THEN bError := TRUE; nErrorCode := 3; RETURN; END_IF
+            aLine[nLineLength] := UDINT_TO_BYTE(nCurrent);
+            nLineLength := nLineLength + 1;
+        END_IF
+    END_FOR
+END_IF
+IF bSawCR OR (nLineLength <> 0) THEN bError := TRUE; nErrorCode := 4; RETURN; END_IF
+IF nFileKind = 1 THEN
+    IF nConfigCount <> 4 THEN bError := TRUE; nErrorCode := 5; RETURN; END_IF
+    bConfigParsed := TRUE;
+ELSE
+    IF nSecretsCount <> 2 THEN bError := TRUE; nErrorCode := 5; RETURN; END_IF
+    bSecretsParsed := TRUE;
+END_IF
+bReady := bConfigParsed AND bSecretsParsed;
+ParseFile := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="ProcessLine" Id="{c913ba10-565b-4a23-aafe-7f5894fe0305}">
+      <Declaration><![CDATA[METHOD PRIVATE ProcessLine : BOOL
+VAR_INPUT
+    nFileKind : USINT;
+END_VAR
+VAR
+    nScan : UDINT;
+    bValid : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ProcessLine := FALSE;
+IF nLineLength = 0 THEN ProcessLine := TRUE; RETURN; END_IF
+IF aLine[0] = 35 THEN ProcessLine := TRUE; RETURN; END_IF
+nKeyLength := 0; nValueLength := 0; bEqualsFound := FALSE;
+FOR nScan := 0 TO nLineLength - 1 DO
+    IF (aLine[nScan] = 61) AND NOT bEqualsFound THEN
+        bEqualsFound := TRUE; nKeyLength := nScan; nValueLength := nLineLength - nScan - 1;
+    END_IF
+END_FOR
+IF NOT bEqualsFound OR (nKeyLength = 0) OR (nKeyLength > 32) OR (nValueLength > 255) THEN
+    bError := TRUE; nErrorCode := 6; RETURN;
+END_IF
+FOR nScan := 0 TO 32 DO aKey[nScan] := 0; END_FOR
+FOR nScan := 0 TO 255 DO aValue[nScan] := 0; END_FOR
+FOR nScan := 0 TO nKeyLength - 1 DO aKey[nScan] := aLine[nScan]; END_FOR
+IF nValueLength > 0 THEN
+    FOR nScan := 0 TO nValueLength - 1 DO aValue[nScan] := aLine[nKeyLength + 1 + nScan]; END_FOR
+END_IF
+nWritten := MEMSET(ADR(sKey), 0, SIZEOF(sKey));
+nWritten := MEMCPY(ADR(sKey), ADR(aKey), nKeyLength + 1);
+IF nWritten <> nKeyLength + 1 THEN bError := TRUE; nErrorCode := 11; RETURN; END_IF
+bValid := FALSE;
+IF nFileKind = 1 THEN
+    IF sKey = 'MQTT_MODE' THEN
+        IF bConfigMode OR (nValueLength <> 6) OR (aValue[0] <> 67) OR (aValue[1] <> 65) OR (aValue[2] <> 78) OR (aValue[3] <> 65) OR (aValue[4] <> 82) OR (aValue[5] <> 89) THEN bError := TRUE; nErrorCode := 7; RETURN; END_IF
+        bConfigMode := TRUE; bValid := TRUE;
+    ELSIF sKey = 'MQTT_HOST' THEN
+        IF bConfigHost OR (nValueLength <> 14) OR (aValue[0] <> 99) OR (aValue[1] <> 97) OR (aValue[2] <> 110) OR (aValue[3] <> 97) OR (aValue[4] <> 114) OR (aValue[5] <> 121) OR (aValue[6] <> 46) OR (aValue[7] <> 105) OR (aValue[8] <> 110) OR (aValue[9] <> 118) OR (aValue[10] <> 97) OR (aValue[11] <> 108) OR (aValue[12] <> 105) OR (aValue[13] <> 100) THEN bError := TRUE; nErrorCode := 7; RETURN; END_IF
+        bConfigHost := TRUE; sStagedHostName := 'canary.invalid'; bValid := TRUE;
+    ELSIF sKey = 'MQTT_PORT' THEN
+        IF bConfigPort OR (nValueLength = 0) OR (nValueLength > 5) THEN bError := TRUE; nErrorCode := 8; RETURN; END_IF
+        nPortValue := 0;
+        FOR nScan := 0 TO nValueLength - 1 DO
+            IF (aValue[nScan] < 48) OR (aValue[nScan] > 57) THEN bError := TRUE; nErrorCode := 8; RETURN; END_IF
+            nPortValue := (nPortValue * 10) + BYTE_TO_UDINT(aValue[nScan]) - 48;
+            IF nPortValue > 65535 THEN bError := TRUE; nErrorCode := 8; RETURN; END_IF
+        END_FOR
+        IF nPortValue <> 1883 THEN bError := TRUE; nErrorCode := 8; RETURN; END_IF
+        bConfigPort := TRUE; nStagedHostPort := UDINT_TO_UINT(nPortValue); bValid := TRUE;
+    ELSIF sKey = 'MQTT_TLS' THEN
+        IF bConfigTls OR (nValueLength <> 5) OR (aValue[0] <> 102) OR (aValue[1] <> 97) OR (aValue[2] <> 108) OR (aValue[3] <> 115) OR (aValue[4] <> 101) THEN bError := TRUE; nErrorCode := 7; RETURN; END_IF
+        bConfigTls := TRUE; bValid := TRUE;
+    END_IF
+ELSE
+    IF (sKey = 'MQTT_USERNAME') OR (sKey = 'MQTT_PASSWORD') THEN
+        IF (nValueLength <= 7) OR (aValue[0] <> 67) OR (aValue[1] <> 65) OR (aValue[2] <> 78) OR (aValue[3] <> 65) OR (aValue[4] <> 82) OR (aValue[5] <> 89) OR (aValue[6] <> 45) THEN bError := TRUE; nErrorCode := 9; RETURN; END_IF
+        IF sKey = 'MQTT_USERNAME' THEN
+            IF bSecretsUser THEN bError := TRUE; nErrorCode := 7; RETURN; END_IF
+            nWritten := MEMCPY(ADR(sStagedUserName), ADR(aValue), nValueLength + 1);
+            IF nWritten <> nValueLength + 1 THEN bError := TRUE; nErrorCode := 11; RETURN; END_IF
+            bSecretsUser := TRUE;
+        ELSE
+            IF bSecretsPassword THEN bError := TRUE; nErrorCode := 7; RETURN; END_IF
+            nWritten := MEMCPY(ADR(sStagedUserPassword), ADR(aValue), nValueLength + 1);
+            IF nWritten <> nValueLength + 1 THEN bError := TRUE; nErrorCode := 11; RETURN; END_IF
+            bSecretsPassword := TRUE;
+        END_IF
+        bValid := TRUE;
+    END_IF
+END_IF
+IF NOT bValid THEN bError := TRUE; nErrorCode := 10; RETURN; END_IF
+IF nFileKind = 1 THEN nConfigCount := nConfigCount + 1; ELSE nSecretsCount := nSecretsCount + 1; END_IF
+ProcessLine := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="ApplyToClient" Id="{c913ba10-565b-4a23-aafe-7f5894fe0306}">
+      <Declaration><![CDATA[METHOD PUBLIC ApplyToClient : BOOL
+VAR_IN_OUT
+    fbClient : FB_IotMqtt5Client;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ApplyToClient := FALSE;
+IF NOT bReady OR bError THEN RETURN; END_IF
+fbClient.sHostName := sStagedHostName;
+fbClient.nHostPort := nStagedHostPort;
+fbClient.sUserName := sStagedUserName;
+fbClient.sUserPassword := sStagedUserPassword;
+ApplyToClient := TRUE;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

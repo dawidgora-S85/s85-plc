@@ -15,6 +15,7 @@ VAR
     fbLocationWorkshopTests : FB_Location_WorkshopTests;
     fbMqttLightBuilderTests : FB_MqttLightBuilderTests;
     fbMqttLightProtocolTests : FB_MqttLightProtocolTests;
+    fbMqttCanaryParserTests : FB_MqttCanaryParserTests;
 {END_IF}
 END_VAR]]></Declaration>
     <Implementation>
