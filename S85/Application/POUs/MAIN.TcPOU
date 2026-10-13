@@ -4,7 +4,11 @@
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
     fbWorkshop : FB_Workshop;
+    fbEntryway : FB_Workshop;
+    fbEntrywayUpperButton : FB_Workshop;
     bWorkshopButton : BOOL;
+    bEntrywayButton : BOOL;
+    bEntrywayUpperButton : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[{IF defined (WORKSHOP_HW)}
@@ -20,18 +24,32 @@ END_VAR]]></Declaration>
 
 {IF defined (WORKSHOP_HW)}
 bWorkshopButton := GVL_WorkshopIO.bButton;
+bEntrywayButton := GVL_EntrywayIO.bButton;
+bEntrywayUpperButton := GVL_EntrywayIO.bUpperButton;
 {ELSE}
 bWorkshopButton := GVL_WorkshopSimulation.bButton;
+bEntrywayButton := GVL_EntrywaySimulation.bButton;
+bEntrywayUpperButton := GVL_EntrywaySimulation.bUpperButton;
 {END_IF}
 
 fbWorkshop(
     bButton := bWorkshopButton
 );
+fbEntryway(
+    bButton := bEntrywayButton
+);
+fbEntrywayUpperButton(
+    bButton := bEntrywayUpperButton
+);
 
 {IF defined (WORKSHOP_HW)}
 GVL_WorkshopIO.bLightRelay := fbWorkshop.bLightRelay;
+GVL_EntrywayIO.bLightRelay := fbEntryway.bLightRelay;
+GVL_EntrywayIO.bTemporaryLightRelay := fbEntrywayUpperButton.bLightRelay;
 {ELSE}
 GVL_WorkshopSimulation.bLightRelay := fbWorkshop.bLightRelay;
+GVL_EntrywaySimulation.bLightRelay := fbEntryway.bLightRelay;
+GVL_EntrywaySimulation.bTemporaryLightRelay := fbEntrywayUpperButton.bLightRelay;
 {END_IF}]]></ST>
     </Implementation>
   </POU>

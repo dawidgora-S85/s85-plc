@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_EntrywayIO" Id="{31ae7936-dcd6-43b4-ad07-8a851285d626}">
+    <Declaration><![CDATA[VAR_GLOBAL
+{IF defined (WORKSHOP_HW)}
+    bButton AT %I* : BOOL;
+    bUpperButton AT %I* : BOOL;
+    bLightRelay AT %Q* : BOOL;
+    bTemporaryLightRelay AT %Q* : BOOL;
+{END_IF}
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

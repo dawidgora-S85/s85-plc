@@ -12,9 +12,12 @@ END_VAR]]></Declaration>
 VAR
     fbWorkshop : FB_Workshop;
     fbStartupHigh : FB_Workshop;
+    fbEntryway : FB_Workshop;
+    fbEntrywayUpper : FB_Workshop;
+    fbUpperStartupHigh : FB_Workshop;
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Workshop button startup and toggle sequence');
+        <ST><![CDATA[TEST('Workshop, entryway, and upper button toggle sequences');
 
 fbStartupHigh(bButton := TRUE);
 AssertFalse(
@@ -28,16 +31,42 @@ AssertTrue(
     Message := 'Startup-high input toggles only after release and new press'
 );
 
+fbUpperStartupHigh(bButton := TRUE);
+AssertFalse(
+    Condition := fbUpperStartupHigh.bLightRelay,
+    Message := 'Upper-button startup-high input is ignored'
+);
+fbUpperStartupHigh(bButton := FALSE);
+fbUpperStartupHigh(bButton := TRUE);
+AssertTrue(
+    Condition := fbUpperStartupHigh.bLightRelay,
+    Message := 'Upper button toggles only after startup release and new press'
+);
+
 fbWorkshop(bButton := FALSE);
+fbEntryway(bButton := FALSE);
+fbEntrywayUpper(bButton := FALSE);
 AssertFalse(
     Condition := fbWorkshop.bLightRelay,
     Message := 'Initial low input leaves the relay OFF'
+);
+AssertFalse(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Entryway relay also starts OFF'
+);
+AssertFalse(
+    Condition := fbEntrywayUpper.bLightRelay,
+    Message := 'Entryway temporary relay starts OFF'
 );
 
 fbWorkshop(bButton := TRUE);
 AssertTrue(
     Condition := fbWorkshop.bLightRelay,
     Message := 'New press turns the relay ON'
+);
+AssertFalse(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Workshop press does not change the entryway relay'
 );
 
 fbWorkshop(bButton := TRUE);
@@ -52,10 +81,82 @@ AssertTrue(
     Message := 'Release leaves the relay ON'
 );
 
+fbEntryway(bButton := TRUE);
+AssertTrue(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Entryway press turns its independent relay ON'
+);
+AssertTrue(
+    Condition := fbWorkshop.bLightRelay,
+    Message := 'Entryway press leaves the workshop relay ON'
+);
+
+fbEntrywayUpper(bButton := TRUE);
+AssertTrue(
+    Condition := fbEntrywayUpper.bLightRelay,
+    Message := 'Upper button turns the temporary relay ON'
+);
+AssertTrue(
+    Condition := fbWorkshop.bLightRelay,
+    Message := 'Upper-button press leaves Workshop lighting ON'
+);
+AssertTrue(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Upper-button press leaves Entryway main lighting ON'
+);
+
+fbEntrywayUpper(bButton := TRUE);
+AssertTrue(
+    Condition := fbEntrywayUpper.bLightRelay,
+    Message := 'Holding the upper button does not toggle again'
+);
+fbEntrywayUpper(bButton := FALSE);
+AssertTrue(
+    Condition := fbEntrywayUpper.bLightRelay,
+    Message := 'Upper-button release leaves the temporary relay ON'
+);
+fbEntrywayUpper(bButton := TRUE);
+AssertFalse(
+    Condition := fbEntrywayUpper.bLightRelay,
+    Message := 'Next upper-button press turns the temporary relay OFF'
+);
+AssertTrue(
+    Condition := fbWorkshop.bLightRelay,
+    Message := 'Upper-button sequence leaves Workshop lighting ON'
+);
+AssertTrue(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Upper-button sequence leaves Entryway main lighting ON'
+);
+
+fbEntryway(bButton := TRUE);
+AssertTrue(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Holding the entryway button does not toggle again'
+);
+fbEntryway(bButton := FALSE);
+AssertTrue(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Entryway release leaves its relay ON'
+);
+fbEntryway(bButton := TRUE);
+AssertFalse(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Next entryway press turns its relay OFF'
+);
+AssertTrue(
+    Condition := fbWorkshop.bLightRelay,
+    Message := 'Entryway sequence leaves the workshop relay ON'
+);
+
 fbWorkshop(bButton := TRUE);
 AssertFalse(
     Condition := fbWorkshop.bLightRelay,
-    Message := 'Next press turns the relay OFF'
+    Message := 'Next workshop press turns the relay OFF'
+);
+AssertFalse(
+    Condition := fbEntryway.bLightRelay,
+    Message := 'Workshop press leaves the entryway relay OFF'
 );
 
 TEST_FINISHED();]]></ST>

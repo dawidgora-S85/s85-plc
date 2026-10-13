@@ -49,6 +49,9 @@
     <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_WorkshopIO.TcGVL">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_EntrywayIO.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
@@ -62,6 +65,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Simulation\GVL_WorkshopSimulation.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Simulation\GVL_EntrywaySimulation.TcGVL">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Tests\Domains\Lighting\POUs\FB_LightTests.TcPOU">
