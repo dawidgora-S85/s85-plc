@@ -35,11 +35,15 @@ Each new press toggles the relay; holding or releasing the button leaves the rel
 
 ## Verification
 
+Use the [TwinCAT XAE workflow](twincat-xae.md) for solution prerequisites, the verified build route and toolchain limitations.
+
 Before merging logic changes, build HW and SIM modes and verify that invalid define combinations fail.
-Run TcUnit and record the results in the PR.
+Run TcUnit only in an explicitly configured, isolated test environment, never on the production CX.
+Record actual results in the PR; unexecuted tests are not a pass.
 
 `FB_WorkshopTests` is registered with the existing TcUnit test program.
-`PlcTask` schedules `PRG_Tests` alongside `MAIN`, so the test runner also runs in the live task.
+`PlcTask` schedules only `MAIN`; `PRG_Tests` and the TcUnit reference remain in the project but tests no longer run automatically.
+A separate test execution setup is required and is not provided here.
 
 Check manually before deployment:
 
