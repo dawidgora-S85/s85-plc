@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Workshop" Id="{4cb4c94a-a979-4da1-85e5-4bfab4a678c9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Workshop
+VAR_INPUT
+    bButton : BOOL;
+END_VAR
+
+VAR_OUTPUT
+    bLightRelay : BOOL;
+END_VAR
+
+VAR
+    fbLight : FB_Light;
+    bArmed : BOOL;
+    bToggle : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bToggle := FALSE;
+
+IF NOT bButton THEN
+    bArmed := TRUE;
+ELSIF bArmed THEN
+    bArmed := FALSE;
+    bToggle := TRUE;
+END_IF
+
+fbLight(bToggle := bToggle);
+bLightRelay := fbLight.bOn;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

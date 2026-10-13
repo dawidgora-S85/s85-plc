@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_WorkshopSimulation" Id="{97aeffb6-27ef-4ee2-bfa6-f4af13cc7e75}">
+    <Declaration><![CDATA[VAR_GLOBAL
+    bButton : BOOL;
+    bLightRelay : BOOL;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

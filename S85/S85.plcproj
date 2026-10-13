@@ -9,17 +9,20 @@
     <WriteProductVersion>false</WriteProductVersion>
     <GenerateTpy>false</GenerateTpy>
     <Name>S85</Name>
-    <ProgramVersion>3.1.4026.26</ProgramVersion>
+    <ProgramVersion>3.1.4026.27</ProgramVersion>
     <Application>{7e3780bb-963c-4c48-940f-c8f76db0c1a1}</Application>
     <TypeSystem>{7bf4f96a-96cc-4634-8595-0c7321ca9592}</TypeSystem>
     <Implicit_Task_Info>{2ce2ef0f-fd67-4d51-9eb1-e746a8db858c}</Implicit_Task_Info>
     <Implicit_KindOfTask>{c4a135c5-884f-4f11-b2ec-cc4413e8771b}</Implicit_KindOfTask>
     <Implicit_Jitter_Distribution>{b559f113-fa13-4e67-b70a-5454bfd2e3a7}</Implicit_Jitter_Distribution>
     <LibraryReferences>{e6906c99-6e5d-4d83-b388-5cab0d04dee2}</LibraryReferences>
-    <CompilerDefines>VISU_USEPROPERTYINFO</CompilerDefines>
+    <CompilerDefines>WORKSHOP_HW</CompilerDefines>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Application\POUs\FB_Home.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Application\POUs\FB_Workshop.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Application\POUs\MAIN.TcPOU">
@@ -37,13 +40,13 @@
     <Compile Include="Domains\Lightning\POUs\FB_Light.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="GlobalTextList.TcGTLO">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeInputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeOutputs.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_WorkshopIO.TcGVL">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="PlcTask.TcTTO">
@@ -58,20 +61,19 @@
     <Compile Include="Simulation\POUs\FB_SimulationOutputs.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Simulation\Visualization\VISU_Simulation.TcVIS">
+    <Compile Include="Simulation\GVL_WorkshopSimulation.TcGVL">
       <SubType>Code</SubType>
-      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
     </Compile>
     <Compile Include="Tests\Domains\Lighting\POUs\FB_LightTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Domains\Lighting\POUs\FB_WorkshopTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Tests\PRG_Tests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Tests\Shared\POUs\FB_ButtonTests.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Visualization Manager.TcVMO">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>
@@ -89,8 +91,9 @@
     <Folder Include="Configuration" />
     <Folder Include="Infrastructure\IO\Logical" />
     <Folder Include="Infrastructure\IO\Logical\DUTs" />
+    <Folder Include="Infrastructure\IO\Beckhoff" />
+    <Folder Include="Infrastructure\IO\Beckhoff\GVLs" />
     <Folder Include="Shared\POUs" />
-    <Folder Include="Simulation\Visualization" />
     <Folder Include="Simulation\POUs" />
     <Folder Include="Tests" />
     <Folder Include="Shared" />
@@ -175,8 +178,8 @@
   <ProjectExtensions>
     <PlcProjectOptions>
       <XmlArchive>
-  <Data>
-    <o xml:space="preserve" t="OptionKey">
+        <Data>
+          <o xml:space="preserve" t="OptionKey">
       <v n="Name">"&lt;ProjectRoot&gt;"</v>
       <d n="SubKeys" t="Hashtable" ckt="String" cvt="OptionKey">
         <v>{192FAD59-8248-4824-A8DE-9177C94C195A}</v>
@@ -257,14 +260,14 @@
       </d>
       <d n="Values" t="Hashtable" />
     </o>
-  </Data>
-  <TypeList>
-    <Type n="Boolean">System.Boolean</Type>
-    <Type n="Hashtable">System.Collections.Hashtable</Type>
-    <Type n="OptionKey">{54dd0eac-a6d8-46f2-8c27-2f43c7e49861}</Type>
-    <Type n="String">System.String</Type>
-  </TypeList>
-</XmlArchive>
+        </Data>
+        <TypeList>
+          <Type n="Boolean">System.Boolean</Type>
+          <Type n="Hashtable">System.Collections.Hashtable</Type>
+          <Type n="OptionKey">{54dd0eac-a6d8-46f2-8c27-2f43c7e49861}</Type>
+          <Type n="String">System.String</Type>
+        </TypeList>
+      </XmlArchive>
     </PlcProjectOptions>
   </ProjectExtensions>
 </Project>

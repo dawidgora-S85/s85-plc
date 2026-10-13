@@ -3,26 +3,36 @@
   <POU Name="MAIN" Id="{4bca9e79-1877-4bca-8065-d77b30175a3b}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
-    fbHome : FB_Home;
-    fbSimulationInputs : FB_SimulationInputs;
-    fbSimulationOutputs : FB_SimulationOutputs;
-
-    stInputs : ST_HomeInputs;
-    stOutputs : ST_HomeOutputs;
+    fbWorkshop : FB_Workshop;
+    bWorkshopButton : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbSimulationInputs(
-    stInputs => stInputs
+      <ST><![CDATA[{IF defined (WORKSHOP_HW)}
+    {IF defined (WORKSHOP_SIM)}
+        {error 'Define exactly one of WORKSHOP_HW or WORKSHOP_SIM'}
+    {END_IF}
+{ELSE}
+    {IF defined (WORKSHOP_SIM)}
+    {ELSE}
+        {error 'Define exactly one of WORKSHOP_HW or WORKSHOP_SIM'}
+    {END_IF}
+{END_IF}
+
+{IF defined (WORKSHOP_HW)}
+bWorkshopButton := GVL_WorkshopIO.bButton;
+{ELSE}
+bWorkshopButton := GVL_WorkshopSimulation.bButton;
+{END_IF}
+
+fbWorkshop(
+    bButton := bWorkshopButton
 );
 
-fbHome(
-    stInputs := stInputs,
-    stOutputs => stOutputs
-);
-
-fbSimulationOutputs(
-    stOutputs := stOutputs
-);]]></ST>
+{IF defined (WORKSHOP_HW)}
+GVL_WorkshopIO.bLightRelay := fbWorkshop.bLightRelay;
+{ELSE}
+GVL_WorkshopSimulation.bLightRelay := fbWorkshop.bLightRelay;
+{END_IF}]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>
