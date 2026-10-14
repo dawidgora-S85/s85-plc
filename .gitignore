@@ -1,6 +1,7 @@
 # Visual Studio
 **/.vs/
 *.sln
+!/S85.sln
 *.user
 *.suo
 *.userosscache
@@ -32,6 +33,8 @@ _TwinCAT Boot/
 *.compiled-library
 *.asm
 *.core
+# The native PLC library directory is not a core dump.
+!/S85.Core/
 
 # Separate Line IDs
 LineIDs.dbg

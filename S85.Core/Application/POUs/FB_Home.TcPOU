@@ -12,13 +12,19 @@ VAR_OUTPUT
 END_VAR
 
 VAR
-	fbDummyRoom : FB_DummyRoom;
+    fbWorkshop : FB_Location_Workshop;
+    fbEntryway : FB_Location_Entryway;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbDummyRoom(
-    stInputs := stInputs.DummyRoom,
-    stOutputs => stOutputs.DummyRoom
+      <ST><![CDATA[fbWorkshop(
+    stInputs := stInputs.Workshop,
+    stOutputs => stOutputs.Workshop
+);
+
+fbEntryway(
+    stInputs := stInputs.Entryway,
+    stOutputs => stOutputs.Entryway
 );]]></ST>
     </Implementation>
   </POU>

@@ -19,31 +19,13 @@
     <CompilerDefines>WORKSHOP_HW</CompilerDefines>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Application\POUs\FB_Home.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Application\POUs\FB_Workshop.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Application\POUs\MAIN.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Rooms\DUTs\ST_DummyRoomInputs.TcDUT">
+    <Compile Include="Application\POUs\FB_HardwareInputs.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Rooms\DUTs\ST_DummyRoomOutputs.TcDUT">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Configuration\Rooms\POUs\FB_DummyRoom.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Domains\Lightning\POUs\FB_Light.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeInputs.TcDUT">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Infrastructure\IO\Logical\DUTs\ST_HomeOutputs.TcDUT">
+    <Compile Include="Application\POUs\FB_HardwareOutputs.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_WorkshopIO.TcGVL">
@@ -53,9 +35,6 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="PlcTask.TcTTO">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Shared\POUs\FB_Button.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Simulation\POUs\FB_SimulationInputs.TcPOU">
@@ -76,6 +55,9 @@
     <Compile Include="Tests\Domains\Lighting\POUs\FB_WorkshopTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Tests\Application\POUs\FB_HomeTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Tests\PRG_Tests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -86,27 +68,18 @@
   <ItemGroup>
     <Folder Include="Application" />
     <Folder Include="Application\POUs" />
-    <Folder Include="Configuration\Rooms" />
-    <Folder Include="Configuration\Rooms\DUTs" />
-    <Folder Include="Configuration\Rooms\POUs" />
-    <Folder Include="Domains" />
-    <Folder Include="Domains\Lightning" />
-    <Folder Include="Domains\Lightning\POUs" />
     <Folder Include="Infrastructure" />
     <Folder Include="Infrastructure\IO" />
-    <Folder Include="Configuration" />
-    <Folder Include="Infrastructure\IO\Logical" />
-    <Folder Include="Infrastructure\IO\Logical\DUTs" />
     <Folder Include="Infrastructure\IO\Beckhoff" />
     <Folder Include="Infrastructure\IO\Beckhoff\GVLs" />
-    <Folder Include="Shared\POUs" />
     <Folder Include="Simulation\POUs" />
     <Folder Include="Tests" />
-    <Folder Include="Shared" />
     <Folder Include="Simulation" />
     <Folder Include="Tests\Domains" />
     <Folder Include="Tests\Domains\Lighting" />
     <Folder Include="Tests\Domains\Lighting\POUs" />
+    <Folder Include="Tests\Application" />
+    <Folder Include="Tests\Application\POUs" />
     <Folder Include="Tests\Shared" />
     <Folder Include="Tests\Shared\POUs" />
   </ItemGroup>
@@ -170,6 +143,9 @@
       <DefaultResolution>TcUnit, * (www.tcunit.org)</DefaultResolution>
       <Namespace>TcUnit</Namespace>
     </PlaceholderReference>
+    <LibraryReference Include="[S85.Core],1.0.0.0,S85">
+      <Namespace>S85Core</Namespace>
+    </LibraryReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="S85.tmc">

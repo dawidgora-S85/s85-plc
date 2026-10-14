@@ -6,6 +6,7 @@ VAR
     fbLightTests : FB_LightTests;
 	fbButtonTests : FB_ButtonTests;
     fbWorkshopTests : FB_WorkshopTests;
+    fbHomeTests : FB_HomeTests;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[TcUnit.RUN();]]></ST>

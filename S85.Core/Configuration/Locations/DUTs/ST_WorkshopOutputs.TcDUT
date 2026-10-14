@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_WorkshopOutputs" Id="{c193ec37-15dd-46b0-914a-80dcdd01fd86}">
+    <Declaration><![CDATA[TYPE ST_WorkshopOutputs :
+STRUCT
+    bLightRelay : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

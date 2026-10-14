@@ -4,15 +4,11 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_SimulationOutputs
 VAR_INPUT
     stOutputs : ST_HomeOutputs;
-END_VAR
-
-VAR
-    bDummyRoomLight1Relay : BOOL;
-    bDummyRoomLight2Relay : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[bDummyRoomLight1Relay := stOutputs.DummyRoom.bLight1;
-bDummyRoomLight2Relay := stOutputs.DummyRoom.bLight2;]]></ST>
+      <ST><![CDATA[GVL_WorkshopSimulation.bLightRelay := stOutputs.Workshop.bLightRelay;
+GVL_EntrywaySimulation.bLightRelay := stOutputs.Entryway.bLightRelay;
+GVL_EntrywaySimulation.bTemporaryLightRelay := stOutputs.Entryway.bTemporaryLightRelay;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

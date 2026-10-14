@@ -6,6 +6,13 @@
 - Keep changes narrow. Do not change hardware, I/O mappings or target settings without explicit authorization.
 - Record task-specific progress and verification results in the PR, not in project documentation.
 
+## PLC project structure
+
+- `S85.tsproj` owns system composition, task scheduling, EtherCAT configuration and I/O mappings.
+- `S85/S85.plcproj` owns `MAIN`, application integration, simulation and test code.
+- `S85.Core/S85.Core.tspproj` wraps the standalone PLC library in `S85.Core/S85_Core.plcproj`.
+- The Core library owns environment-independent application logic and contracts, including `FB_Home`, the Workshop and Entryway location blocks and contracts, `FB_Workshop`, `FB_Light` and `FB_Button`. Consumers reference it through Library Manager; hardware, simulation and tests stay in the application project.
+
 ## Documentation index
 
 - [TwinCAT XAE workflow](docs/twincat-xae.md): read before starting XAE, building PLC code or investigating toolchain failures.

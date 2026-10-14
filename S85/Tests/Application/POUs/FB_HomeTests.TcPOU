@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_HomeTests" Id="{8f78ec54-3b6d-4c4f-b4ba-d19d96d572ea}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_HomeTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[WorkshopEntrywayAndUpperButtonAreIndependent();]]></ST>
+    </Implementation>
+    <Method Name="WorkshopEntrywayAndUpperButtonAreIndependent" Id="{95cec776-9b38-4309-8dc4-ff3ac3f31880}">
+      <Declaration><![CDATA[METHOD PRIVATE WorkshopEntrywayAndUpperButtonAreIndependent
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Home circuits ignore startup-high, hold, release, and toggle independently');
+
+stInputs.Workshop.bButton := TRUE;
+stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertFalse(Condition := stOutputs.Workshop.bLightRelay, Message := 'Workshop ignores a startup-high input');
+AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway ignores a startup-high input');
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Upper button ignores a startup-high input');
+
+stInputs.Workshop.bButton := FALSE;
+stInputs.Entryway.bButton := FALSE;
+stInputs.Entryway.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Workshop.bButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Workshop press turns its relay on');
+AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Workshop press leaves Entryway off');
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Workshop press leaves upper relay off');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Holding Workshop does not toggle again');
+stInputs.Workshop.bButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Workshop release leaves its relay on');
+stInputs.Workshop.bButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertFalse(Condition := stOutputs.Workshop.bLightRelay, Message := 'Workshop repress toggles its relay off');
+
+stInputs.Workshop.bButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Workshop.bButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Workshop.bButton := FALSE;
+stInputs.Entryway.bButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Entryway press leaves Workshop on');
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway press turns its relay on');
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Entryway press leaves upper relay off');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay, Message := 'Holding Entryway does not toggle again');
+stInputs.Entryway.bButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway release leaves its relay on');
+stInputs.Entryway.bButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway repress toggles its relay off');
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Entryway repress leaves Workshop on');
+
+stInputs.Entryway.bButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Entryway.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Upper-button press leaves Workshop on');
+AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Upper-button press leaves Entryway off');
+AssertTrue(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Upper-button press turns its relay on');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Holding the upper button does not toggle again');
+stInputs.Entryway.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Upper-button release leaves its relay on');
+stInputs.Entryway.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Upper-button repress toggles its relay off');
+AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Upper-button repress leaves Workshop on');
+AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Upper-button repress leaves Entryway off');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

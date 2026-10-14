@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_EntrywayOutputs" Id="{b2b1344a-8d60-474e-8346-445e46e4f4e4}">
+    <Declaration><![CDATA[TYPE ST_EntrywayOutputs :
+STRUCT
+    bLightRelay : BOOL;
+    bTemporaryLightRelay : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

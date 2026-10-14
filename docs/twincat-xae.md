@@ -17,10 +17,10 @@ Build the configurations relevant to each PLC change and record fresh results in
 
 ## Prepare the solution
 
-- `S85.sln` is currently ignored by Git. A checkout or `git archive` does not include it.
-- Use the existing local solution. For a temporary project copy, also copy that solution unchanged and preserve relative project paths.
-- If the solution is missing, stop and report the prerequisite. Do not invent or modify a solution during verification.
-- Tracking the solution is deferred to the LOCAL/PROD/Core migration. Do not change ignore rules as a build workaround.
+- `S85.sln` is tracked. It includes `S85.tsproj` and the standalone library wrapper `S85.Core/S85.Core.tspproj`.
+- The library code is in `S85.Core/S85_Core.plcproj`.
+- For a temporary project copy, copy `S85.sln` unchanged and preserve both relative project paths.
+- If `S85.sln` is missing, stop and report the prerequisite. Do not create a replacement for verification.
 
 ## Verified build route
 

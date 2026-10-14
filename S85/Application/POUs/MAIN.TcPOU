@@ -3,12 +3,13 @@
   <POU Name="MAIN" Id="{4bca9e79-1877-4bca-8065-d77b30175a3b}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
-    fbWorkshop : FB_Workshop;
-    fbEntryway : FB_Workshop;
-    fbEntrywayUpperButton : FB_Workshop;
-    bWorkshopButton : BOOL;
-    bEntrywayButton : BOOL;
-    bEntrywayUpperButton : BOOL;
+    fbHome : FB_Home;
+    fbHardwareInputs : FB_HardwareInputs;
+    fbHardwareOutputs : FB_HardwareOutputs;
+    fbSimulationInputs : FB_SimulationInputs;
+    fbSimulationOutputs : FB_SimulationOutputs;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[{IF defined (WORKSHOP_HW)}
@@ -23,33 +24,20 @@ END_VAR]]></Declaration>
 {END_IF}
 
 {IF defined (WORKSHOP_HW)}
-bWorkshopButton := GVL_WorkshopIO.bButton;
-bEntrywayButton := GVL_EntrywayIO.bButton;
-bEntrywayUpperButton := GVL_EntrywayIO.bUpperButton;
+fbHardwareInputs(stInputs => stInputs);
 {ELSE}
-bWorkshopButton := GVL_WorkshopSimulation.bButton;
-bEntrywayButton := GVL_EntrywaySimulation.bButton;
-bEntrywayUpperButton := GVL_EntrywaySimulation.bUpperButton;
+fbSimulationInputs(stInputs => stInputs);
 {END_IF}
 
-fbWorkshop(
-    bButton := bWorkshopButton
-);
-fbEntryway(
-    bButton := bEntrywayButton
-);
-fbEntrywayUpperButton(
-    bButton := bEntrywayUpperButton
+fbHome(
+    stInputs := stInputs,
+    stOutputs => stOutputs
 );
 
 {IF defined (WORKSHOP_HW)}
-GVL_WorkshopIO.bLightRelay := fbWorkshop.bLightRelay;
-GVL_EntrywayIO.bLightRelay := fbEntryway.bLightRelay;
-GVL_EntrywayIO.bTemporaryLightRelay := fbEntrywayUpperButton.bLightRelay;
+fbHardwareOutputs(stOutputs := stOutputs);
 {ELSE}
-GVL_WorkshopSimulation.bLightRelay := fbWorkshop.bLightRelay;
-GVL_EntrywaySimulation.bLightRelay := fbEntryway.bLightRelay;
-GVL_EntrywaySimulation.bTemporaryLightRelay := fbEntrywayUpperButton.bLightRelay;
+fbSimulationOutputs(stOutputs := stOutputs);
 {END_IF}]]></ST>
     </Implementation>
   </POU>

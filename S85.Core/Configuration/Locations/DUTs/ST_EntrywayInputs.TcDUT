@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_EntrywayInputs" Id="{c7580358-4cba-4ea5-a8b1-488aab250f69}">
+    <Declaration><![CDATA[TYPE ST_EntrywayInputs :
+STRUCT
+    bButton : BOOL;
+    bUpperButton : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
