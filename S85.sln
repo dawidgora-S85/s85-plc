@@ -2,11 +2,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # TcXaeShell Solution File, Format Version 11.00
 VisualStudioVersion = 17.10.35827.194
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{B1E792BE-AA5F-4E3C-8C82-674BF9C0715B}") = "S85.PROD", "S85.PROD.tsproj", "{7535CF7B-137C-41BC-96E2-9D8ECCCE3F0A}"
+Project("{B1E792BE-AA5F-4E3C-8C82-674BF9C0715B}") = "S85.PROD", "S85.PROD\S85.PROD.tsproj", "{7535CF7B-137C-41BC-96E2-9D8ECCCE3F0A}"
 EndProject
 Project("{DFBE7525-6864-4E62-8B2E-D530D69D9D96}") = "S85.Core", "S85.Core\S85.Core.tspproj", "{CF130E1C-DAFC-4E7D-BC21-AD5E81327AA4}"
 EndProject
-Project("{B1E792BE-AA5F-4E3C-8C82-674BF9C0715B}") = "S85.LOCAL", "Local\S85.LOCAL.tsproj", "{36534E61-F1EA-4D8B-9729-50C73BE3CD37}"
+Project("{B1E792BE-AA5F-4E3C-8C82-674BF9C0715B}") = "S85.LOCAL", "S85.LOCAL\S85.LOCAL.tsproj", "{36534E61-F1EA-4D8B-9729-50C73BE3CD37}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

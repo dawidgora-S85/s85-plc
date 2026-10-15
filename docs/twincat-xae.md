@@ -7,15 +7,16 @@ For LOCAL runtime setup and test results, read [LOCAL runtime and tests](worksho
 ## Solution structure
 
 - `S85.sln` contains the PROD system, LOCAL system and shared Core library.
-- `S85.PROD.tsproj` is the production system project.
-- It uses `S85/S85_PROD.plcproj`, PLC application `S85_PROD` and instance `S85_PROD Instance`.
-- `Local/S85.LOCAL.tsproj` is the local system project.
-- It uses `Local/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
+- `S85.PROD/S85.PROD.tsproj` is the production system project.
+- It uses `S85.PROD/S85/S85_PROD.plcproj`, PLC application `S85_PROD` and instance `S85_PROD Instance`.
+- `S85.LOCAL/S85.LOCAL.tsproj` is the local system project.
+- It uses `S85.LOCAL/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
 - Both applications use the library in `S85.Core/S85_Core.plcproj` through `S85.Core/S85.Core.tspproj`.
+- PROD's active EtherCAT device and terminal files are in `S85.PROD/_Config/IO/`, next to its system project. Keep this tree with PROD, not Core.
 
 ## PLC application layout
 
-- The physical project roots remain `S85.Core/`, `Local/S85.LOCAL/` and `S85/`.
+- The physical project roots are `S85.Core/`, `S85.LOCAL/S85.LOCAL/` and `S85.PROD/S85/`.
 - Core's `Application` folder contains the home application DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs.
 - `Domains/Lighting` and `Shared` remain unchanged. `FB_Workshop` stays in `Locations/Workshop/POUs` as behavior separate from the `FB_Location_Workshop` contract adapter.
 - LOCAL uses x64, with simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.

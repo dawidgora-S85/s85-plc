@@ -9,9 +9,9 @@
 ## PLC project structure
 
 - `S85.sln` contains the `S85.PROD`, `S85.LOCAL` and `S85.Core` system projects.
-- `S85.PROD.tsproj` owns production system composition, task scheduling, EtherCAT configuration and I/O mappings.
-- The production system uses `S85/S85_PROD.plcproj`, PLC application `S85_PROD`, instance `S85_PROD Instance` and TMC `S85/S85_PROD.tmc`.
-- `Local/S85.LOCAL.tsproj` owns the local system. It uses `Local/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
+- `S85.PROD/S85.PROD.tsproj` owns production system composition, task scheduling, EtherCAT configuration and I/O mappings.
+- The production system uses `S85.PROD/S85/S85_PROD.plcproj`, PLC application `S85_PROD`, instance `S85_PROD Instance` and TMC `S85.PROD/S85/S85_PROD.tmc`.
+- `S85.LOCAL/S85.LOCAL.tsproj` owns the local system. It uses `S85.LOCAL/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
 - `S85.Core/S85.Core.tspproj` wraps the shared PLC library in `S85.Core/S85_Core.plcproj`.
 - Core owns shared, environment-independent home logic and contracts. `Application` contains the home application and its DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs. `Domains/Lighting` and `Shared` remain unchanged.
 - `FB_Workshop` remains in `Locations/Workshop/POUs` as behavior separate from the `FB_Location_Workshop` contract adapter.
@@ -19,7 +19,7 @@
 - LOCAL uses x64 and keeps simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.
 - PROD uses ARMv8 and keeps physical Beckhoff I/O under `Infrastructure/IO/Beckhoff/{POUs,GVLs}`. It contains no simulation or TcUnit tests.
 - Production contains no test code or environment-switching compiler defines.
-- Keep the physical project roots `S85.Core/`, `Local/S85.LOCAL/` and `S85/`. The reorganized application folders do not change these disk roots.
+- Keep the physical project roots `S85.Core/`, `S85.LOCAL/S85.LOCAL/` and `S85.PROD/S85/`. The system project folders contain their related system configuration.
 
 ## Documentation index
 

@@ -5,11 +5,11 @@ The LOCAL application provides simulation and TcUnit tests.
 
 ## Project split
 
-- PROD uses `S85.PROD.tsproj` and `S85/S85_PROD.plcproj`.
+- PROD uses `S85.PROD/S85.PROD.tsproj` and `S85.PROD/S85/S85_PROD.plcproj`.
 - Its PLC application and instance are `S85_PROD` and `S85_PROD Instance`.
 - PROD `MAIN` always reads hardware inputs, calls `FB_Home` and writes hardware outputs.
 - PROD has no simulation, tests, TcUnit or compiler defines.
-- LOCAL uses `Local/S85.LOCAL.tsproj` and `Local/S85.LOCAL/S85_LOCAL.plcproj`.
+- LOCAL uses `S85.LOCAL/S85.LOCAL.tsproj` and `S85.LOCAL/S85.LOCAL/S85_LOCAL.plcproj`.
 - Its PLC application is `S85_LOCAL`, with instance `S85_LOCAL Instance`.
 - LOCAL contains simulation adapters and TcUnit tests. Both systems use shared Core logic from `S85.Core`.
 
@@ -108,7 +108,7 @@ The production system maps these BOOL variables through Device 1 (EtherCAT), Ter
 - `GVL_EntrywayIO.bLightRelay` at `%Q*`: Term 4 (ED2809), DO Channel 2, Output.
 - `GVL_EntrywayIO.bTemporaryLightRelay` at `%Q*`: Term 4 (ED2809), DO Channel 3, Output.
 
-The production mapping is stored in `S85.PROD.tsproj`.
+The production mapping is stored in `S85.PROD/S85.PROD.tsproj`.
 
 ## Before activation
 
