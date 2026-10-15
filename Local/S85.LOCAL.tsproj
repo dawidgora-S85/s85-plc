@@ -9,8 +9,8 @@
 			</Tasks>
 		</System>
 		<Plc>
-			<Project Disabled="true" GUID="{4DD37535-526B-4D40-A398-542FE49BBBB3}" Name="S85_LOCAL" PrjFilePath="S85.LOCAL\S85_LOCAL.plcproj" TmcFilePath="S85.LOCAL\S85_LOCAL.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{46F02B9A-6C14-7A3A-B9F3-272E38869088}" TmcPath="S85.LOCAL\S85_LOCAL.tmc">
+			<Project GUID="{4DD37535-526B-4D40-A398-542FE49BBBB3}" Name="S85_LOCAL" PrjFilePath="S85.LOCAL\S85_LOCAL.plcproj" TmcFilePath="S85.LOCAL\S85_LOCAL.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{E84C88F5-6A46-5C7A-1176-7D23D09B9414}" TmcPath="S85.LOCAL\S85_LOCAL.tmc">
 					<Name>S85_LOCAL Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Contexts>

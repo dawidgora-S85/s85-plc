@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <TcSmProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2012/07/TcSmProject" TcSmVersion="1.0" TcVersion="3.1.4026.27">
-	<Project ProjectGUID="{CF130E1C-DAFC-4E7D-BC21-AD5E81327AA4}" TargetNetId="5.180.201.239.1.1" Target64Bit="true" ShowHideConfigurations="#x6">
+	<Project ProjectGUID="{CF130E1C-DAFC-4E7D-BC21-AD5E81327AA4}" TargetNetId="199.4.42.250.1.1" Target64Bit="true" ShowHideConfigurations="#x6">
 		<Plc>
 			<Project GUID="{7579E597-556D-4810-954B-7C61C30AC0F4}" Name="S85_Core" PrjFilePath="S85_Core.plcproj" TmcFilePath="S85_Core.tmc" ReloadTmc="true" AmsPort="851" SymbolicMapping="true"/>
 		</Plc>

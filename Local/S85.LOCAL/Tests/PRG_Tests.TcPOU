@@ -7,6 +7,7 @@ VAR
 	fbButtonTests : FB_ButtonTests;
     fbWorkshopTests : FB_WorkshopTests;
     fbHomeTests : FB_HomeTests;
+    fbLightCatalogTests : FB_LightCatalogTests;
     fbLocalIntegrationTests : FB_LocalIntegrationTests;
 END_VAR]]></Declaration>
     <Implementation>

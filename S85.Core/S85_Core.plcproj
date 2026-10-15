@@ -34,6 +34,9 @@
     <Compile Include="Application\DUTs\ST_HomeOutputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Application\DUTs\ST_LightInfo.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Locations\Workshop\POUs\FB_Location_Workshop.TcPOU">
       <SubType>Code</SubType>
     </Compile>

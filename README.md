@@ -6,3 +6,4 @@ Core contains shared, environment-independent home logic. LOCAL provides simulat
 
 See [TwinCAT XAE workflow](docs/twincat-xae.md) for project and build guidance.
 See [Workshop setup and checks](docs/workshop-light.md) for hardware and local tests.
+Instrukcja [dodawania światła](docs/adding-light.md) opisuje konfigurację Core oraz obsługę LOCAL i PROD.

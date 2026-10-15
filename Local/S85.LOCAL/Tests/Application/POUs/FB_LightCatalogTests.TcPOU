@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_LightCatalogTests" Id="{08fdb221-4340-488f-bad9-a16217798d11}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LightCatalogTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CatalogIsStableAndTracksLightOutputs();]]></ST>
+    </Implementation>
+    <Method Name="CatalogIsStableAndTracksLightOutputs" Id="{3f542897-b53f-4eb0-a2bb-873f7a568e3c}">
+      <Declaration><![CDATA[METHOD PRIVATE CatalogIsStableAndTracksLightOutputs
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    nIndex : DINT;
+    nOtherIndex : DINT;
+    nFirstIndex : DINT;
+    nLastIndex : DINT;
+    nLightCount : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Light catalog identities are unique and snapshots track light outputs');
+
+nFirstIndex := 1;
+nLightCount := SIZEOF(fbHome.aLights) / SIZEOF(fbHome.aLights[1]);
+nLastIndex := nFirstIndex + nLightCount - 1;
+stInputs.Workshop.bButton := TRUE;
+stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+
+FOR nIndex := nFirstIndex TO nLastIndex DO
+    AssertTrue(Condition := fbHome.aLights[nIndex].sLocationId <> '', Message := 'Catalog location id is not empty');
+    AssertTrue(Condition := fbHome.aLights[nIndex].sId <> '', Message := 'Catalog light id is not empty');
+    AssertTrue(Condition := fbHome.aLights[nIndex].sType = 'light', Message := 'Catalog type is light');
+    AssertFalse(Condition := fbHome.aLights[nIndex].bOn, Message := 'Startup-high input leaves catalog state off');
+    FOR nOtherIndex := nIndex + 1 TO nLastIndex DO
+        AssertFalse(Condition := fbHome.aLights[nIndex].sLocationId = fbHome.aLights[nOtherIndex].sLocationId AND fbHome.aLights[nIndex].sId = fbHome.aLights[nOtherIndex].sId, Message := 'Catalog location/id pairs are unique');
+    END_FOR
+END_FOR
+AssertTrue(Condition := fbHome.aLights[1].sLocationId = 'H.01-09' AND fbHome.aLights[1].sId = 'main', Message := 'Workshop identity is configured');
+AssertTrue(Condition := fbHome.aLights[2].sLocationId = 'H.01-01' AND fbHome.aLights[2].sId = 'main', Message := 'Entryway identity is configured');
+AssertTrue(Condition := fbHome.aLights[3].sLocationId = 'H.01-01' AND fbHome.aLights[3].sId = 'temporary', Message := 'Temporary identity is configured');
+
+stInputs.Workshop.bButton := FALSE;
+stInputs.Entryway.bButton := FALSE;
+stInputs.Entryway.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Workshop.bButton := TRUE;
+stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn = stOutputs.Workshop.bLightRelay, Message := 'Workshop snapshot matches output in same scan');
+AssertTrue(Condition := fbHome.aLights[2].bOn = stOutputs.Entryway.bLightRelay, Message := 'Entryway snapshot matches output in same scan');
+AssertTrue(Condition := fbHome.aLights[3].bOn = stOutputs.Entryway.bTemporaryLightRelay, Message := 'Temporary snapshot matches output in same scan');
+AssertTrue(Condition := fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Press toggles all three lights on');
+AssertTrue(Condition := fbHome.aLights[1].sLocationId = 'H.01-09' AND fbHome.aLights[1].sId = 'main', Message := 'Workshop identity survives toggle');
+AssertTrue(Condition := fbHome.aLights[2].sLocationId = 'H.01-01' AND fbHome.aLights[2].sId = 'main', Message := 'Entryway identity survives toggle');
+AssertTrue(Condition := fbHome.aLights[3].sLocationId = 'H.01-01' AND fbHome.aLights[3].sId = 'temporary', Message := 'Temporary identity survives toggle');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Held buttons do not toggle again');
+
+stInputs.Workshop.bButton := FALSE;
+stInputs.Entryway.bButton := FALSE;
+stInputs.Entryway.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Workshop.bButton := TRUE;
+stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Second press toggles all three lights off');
+AssertTrue(Condition := fbHome.aLights[1].bOn = stOutputs.Workshop.bLightRelay, Message := 'Workshop OFF snapshot matches output in same scan');
+AssertTrue(Condition := fbHome.aLights[2].bOn = stOutputs.Entryway.bLightRelay, Message := 'Entryway OFF snapshot matches output in same scan');
+AssertTrue(Condition := fbHome.aLights[3].bOn = stOutputs.Entryway.bTemporaryLightRelay, Message := 'Temporary OFF snapshot matches output in same scan');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_Location_Entryway" Id="{f7521329-8123-44c1-8539-6a0ef925431d}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Entryway
@@ -8,6 +8,13 @@ END_VAR
 
 VAR_OUTPUT
     stOutputs : ST_EntrywayOutputs;
+    aLights : ARRAY[1..2] OF ST_LightInfo;
+END_VAR
+
+VAR CONSTANT
+    cLocationId : STRING(16) := 'H.01-01';
+    cMainLightId : STRING(16) := 'main';
+    cTemporaryLightId : STRING(16) := 'temporary';
 END_VAR
 
 VAR
@@ -23,7 +30,14 @@ END_VAR]]></Declaration>
 fbUpperLight(
     bButton := stInputs.bUpperButton,
     bLightRelay => stOutputs.bTemporaryLightRelay
-);]]></ST>
+);
+
+aLights[1].sLocationId := cLocationId;
+aLights[1].sId := cMainLightId;
+aLights[1].bOn := stOutputs.bLightRelay;
+aLights[2].sLocationId := cLocationId;
+aLights[2].sId := cTemporaryLightId;
+aLights[2].bOn := stOutputs.bTemporaryLightRelay;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

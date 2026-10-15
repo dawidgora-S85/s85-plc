@@ -45,6 +45,9 @@
     <Compile Include="Tests\Application\POUs\FB_HomeTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Tests\Application\POUs\FB_LightCatalogTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Tests\Application\POUs\FB_LocalIntegrationTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>

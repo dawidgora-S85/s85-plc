@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_Location_Workshop" Id="{ed6140a9-7ba0-4913-8278-e47fbcd68c6d}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Workshop
@@ -8,6 +8,12 @@ END_VAR
 
 VAR_OUTPUT
     stOutputs : ST_WorkshopOutputs;
+    stLight : ST_LightInfo;
+END_VAR
+
+VAR CONSTANT
+    cLocationId : STRING(16) := 'H.01-09';
+    cMainLightId : STRING(16) := 'main';
 END_VAR
 
 VAR
@@ -17,7 +23,11 @@ END_VAR]]></Declaration>
       <ST><![CDATA[fbWorkshop(
     bButton := stInputs.bButton,
     bLightRelay => stOutputs.bLightRelay
-);]]></ST>
+);
+
+stLight.sLocationId := cLocationId;
+stLight.sId := cMainLightId;
+stLight.bOn := stOutputs.bLightRelay;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>
