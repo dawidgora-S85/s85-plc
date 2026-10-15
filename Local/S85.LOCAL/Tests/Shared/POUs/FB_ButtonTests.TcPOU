@@ -1,0 +1,303 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ButtonTests" Id="{34C1A310-9172-4CAC-AA37-23279A292261}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ButtonTests EXTENDS TcUnit.FB_TestSuite
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ShortPressOnRelease();
+LongPressOnRelease();
+AutoCommitLongPressWhileHeld();
+AutoCommitFiresOnlyOnce();
+ReleaseAfterAutoCommitDoesNotFireAgain();]]></ST>
+    </Implementation>
+    <Method Name="AutoCommitFiresOnlyOnce" Id="{8A5121AD-2525-4C87-987E-F54EDD38B07B}">
+      <Declaration><![CDATA[METHOD PRIVATE AutoCommitFiresOnlyOnce
+VAR_INST
+    fbButton : FB_Button;
+    fbWait : TON;
+    nLongPressCount : USINT;
+    nStep : USINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Auto commit fires only once while held');
+
+CASE nStep OF
+
+    0:
+        fbWait(IN := FALSE);
+        nLongPressCount := 0;
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        nStep := 1;
+
+    1:
+        fbWait(
+            IN := TRUE,
+            PT := T#150MS
+        );
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        IF fbButton.bLongPress THEN
+            nLongPressCount := nLongPressCount + 1;
+        END_IF
+
+        IF fbWait.Q THEN
+            AssertTrue(
+                Condition := nLongPressCount = 1,
+                Message := 'Auto commit should fire exactly once while held'
+            );
+
+            TEST_FINISHED();
+        END_IF
+
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AutoCommitLongPressWhileHeld" Id="{C22E8626-0DFF-4FD8-83B5-ABE5B62F4EF1}">
+      <Declaration><![CDATA[METHOD PRIVATE AutoCommitLongPressWhileHeld
+VAR_INST
+    fbButton : FB_Button;
+    fbWait : TON;
+    nStep : USINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Auto commit fires long press while held');
+
+CASE nStep OF
+
+    0:
+        fbWait(IN := FALSE);
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        nStep := 1;
+
+    1:
+        fbWait(
+            IN := TRUE,
+            PT := T#100MS
+        );
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        IF fbButton.bLongPress THEN
+            AssertFalse(
+                Condition := fbButton.bShortPress,
+                Message := 'Short press must not fire on auto commit'
+            );
+
+            TEST_FINISHED();
+
+        ELSIF fbWait.Q THEN
+            AssertTrue(
+                Condition := FALSE,
+                Message := 'Auto commit did not fire long press'
+            );
+
+            TEST_FINISHED();
+        END_IF
+
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="LongPressOnRelease" Id="{ECCCFCCD-78F2-46BB-AB74-764DB44D1216}">
+      <Declaration><![CDATA[METHOD PRIVATE LongPressOnRelease
+VAR_INST
+    fbButton : FB_Button;
+    fbWait : TON;
+    nStep : USINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Long press fires on release after qualification');
+
+CASE nStep OF
+    0:
+        fbWait(IN := FALSE);
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#50MS,
+            tAutoCommit := T#500MS
+        );
+
+        nStep := 1;
+
+    1:
+        fbWait(
+            IN := TRUE,
+            PT := T#75MS
+        );
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#50MS,
+            tAutoCommit := T#500MS
+        );
+
+        IF fbWait.Q THEN
+            AssertFalse(
+                Condition := fbButton.bLongPress,
+                Message := 'Long press should not fire before release'
+            );
+
+            fbWait(IN := FALSE);
+            nStep := 2;
+        END_IF
+
+    2:
+        fbButton(
+            bPressed := FALSE,
+            tLongPress := T#50MS,
+            tAutoCommit := T#500MS
+        );
+
+        AssertTrue(
+            Condition := fbButton.bLongPress,
+            Message := 'Long press should fire on release'
+        );
+
+        AssertFalse(
+            Condition := fbButton.bShortPress,
+            Message := 'Short press should not fire after long press'
+        );
+
+        TEST_FINISHED();
+
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReleaseAfterAutoCommitDoesNotFireAgain" Id="{0DFB63FA-419A-4639-A985-F78DE8267D88}">
+      <Declaration><![CDATA[METHOD PRIVATE ReleaseAfterAutoCommitDoesNotFireAgain
+VAR_INST
+    fbButton : FB_Button;
+    fbWait : TON;
+    nStep : USINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Release after auto commit does not fire again');
+
+CASE nStep OF
+
+    0:
+        fbWait(IN := FALSE);
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        nStep := 1;
+
+    1:
+        fbWait(
+            IN := TRUE,
+            PT := T#100MS
+        );
+
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        IF fbButton.bLongPress THEN
+            nStep := 2;
+
+        ELSIF fbWait.Q THEN
+            AssertTrue(
+                Condition := FALSE,
+                Message := 'Auto commit did not occur before timeout'
+            );
+
+            TEST_FINISHED();
+        END_IF
+
+    2:
+        fbButton(
+            bPressed := FALSE,
+            tLongPress := T#20MS,
+            tAutoCommit := T#50MS
+        );
+
+        AssertFalse(
+            Condition := fbButton.bLongPress,
+            Message := 'Release must not fire long press again after auto commit'
+        );
+
+        AssertFalse(
+            Condition := fbButton.bShortPress,
+            Message := 'Release must not fire short press after auto commit'
+        );
+
+        TEST_FINISHED();
+
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ShortPressOnRelease" Id="{48A165E4-65BF-4BBC-89D2-BA80735EB7B5}">
+      <Declaration><![CDATA[METHOD PRIVATE ShortPressOnRelease
+VAR_INST
+    fbButton : FB_Button;
+    nStep : USINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Short press fires on release');
+
+CASE nStep OF
+    0:
+        fbButton(
+            bPressed := TRUE,
+            tLongPress := T#1S,
+            tAutoCommit := T#2S
+        );
+
+        nStep := 1;
+
+    1:
+        fbButton(
+            bPressed := FALSE,
+            tLongPress := T#1S,
+            tAutoCommit := T#2S
+        );
+
+        AssertTrue(
+            Condition := fbButton.bShortPress,
+            Message := 'Short press should fire on release'
+        );
+
+        AssertFalse(
+            Condition := fbButton.bLongPress,
+            Message := 'Long press should not fire for a short press'
+        );
+
+        TEST_FINISHED();
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

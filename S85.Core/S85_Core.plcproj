@@ -22,7 +22,7 @@
     <VirtualLibrary>true</VirtualLibrary>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Application\POUs\FB_Workshop.TcPOU">
+    <Compile Include="Locations\Workshop\POUs\FB_Workshop.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Application\POUs\FB_Home.TcPOU">
@@ -34,22 +34,22 @@
     <Compile Include="Application\DUTs\ST_HomeOutputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Locations\POUs\FB_Location_Workshop.TcPOU">
+    <Compile Include="Locations\Workshop\POUs\FB_Location_Workshop.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Locations\POUs\FB_Location_Entryway.TcPOU">
+    <Compile Include="Locations\Entryway\POUs\FB_Location_Entryway.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Locations\DUTs\ST_WorkshopInputs.TcDUT">
+    <Compile Include="Locations\Workshop\DUTs\ST_WorkshopInputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Locations\DUTs\ST_WorkshopOutputs.TcDUT">
+    <Compile Include="Locations\Workshop\DUTs\ST_WorkshopOutputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Locations\DUTs\ST_EntrywayInputs.TcDUT">
+    <Compile Include="Locations\Entryway\DUTs\ST_EntrywayInputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Configuration\Locations\DUTs\ST_EntrywayOutputs.TcDUT">
+    <Compile Include="Locations\Entryway\DUTs\ST_EntrywayOutputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Domains\Lighting\POUs\FB_Light.TcPOU">
@@ -63,10 +63,13 @@
     <Folder Include="Application" />
     <Folder Include="Application\POUs" />
     <Folder Include="Application\DUTs" />
-    <Folder Include="Configuration" />
-    <Folder Include="Configuration\Locations" />
-    <Folder Include="Configuration\Locations\POUs" />
-    <Folder Include="Configuration\Locations\DUTs" />
+    <Folder Include="Locations" />
+    <Folder Include="Locations\Workshop" />
+    <Folder Include="Locations\Workshop\POUs" />
+    <Folder Include="Locations\Workshop\DUTs" />
+    <Folder Include="Locations\Entryway" />
+    <Folder Include="Locations\Entryway\POUs" />
+    <Folder Include="Locations\Entryway\DUTs" />
     <Folder Include="Domains" />
     <Folder Include="Domains\Lighting" />
     <Folder Include="Domains\Lighting\POUs" />

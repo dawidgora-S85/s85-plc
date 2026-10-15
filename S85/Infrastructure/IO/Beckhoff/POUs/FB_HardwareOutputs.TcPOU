@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_HardwareOutputs" Id="{734d95e1-63f5-4b5d-a283-35baa69a6c0e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_HardwareOutputs
+VAR_INPUT
+    stOutputs : ST_HomeOutputs;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+GVL_WorkshopIO.bLightRelay := stOutputs.Workshop.bLightRelay;
+GVL_EntrywayIO.bLightRelay := stOutputs.Entryway.bLightRelay;
+GVL_EntrywayIO.bTemporaryLightRelay := stOutputs.Entryway.bTemporaryLightRelay;
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

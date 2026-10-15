@@ -6,39 +6,20 @@ VAR
     fbHome : FB_Home;
     fbHardwareInputs : FB_HardwareInputs;
     fbHardwareOutputs : FB_HardwareOutputs;
-    fbSimulationInputs : FB_SimulationInputs;
-    fbSimulationOutputs : FB_SimulationOutputs;
     stInputs : ST_HomeInputs;
     stOutputs : ST_HomeOutputs;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[{IF defined (WORKSHOP_HW)}
-    {IF defined (WORKSHOP_SIM)}
-        {error 'Define exactly one of WORKSHOP_HW or WORKSHOP_SIM'}
-    {END_IF}
-{ELSE}
-    {IF defined (WORKSHOP_SIM)}
-    {ELSE}
-        {error 'Define exactly one of WORKSHOP_HW or WORKSHOP_SIM'}
-    {END_IF}
-{END_IF}
-
-{IF defined (WORKSHOP_HW)}
+      <ST><![CDATA[
 fbHardwareInputs(stInputs => stInputs);
-{ELSE}
-fbSimulationInputs(stInputs => stInputs);
-{END_IF}
 
 fbHome(
     stInputs := stInputs,
     stOutputs => stOutputs
 );
 
-{IF defined (WORKSHOP_HW)}
 fbHardwareOutputs(stOutputs := stOutputs);
-{ELSE}
-fbSimulationOutputs(stOutputs := stOutputs);
-{END_IF}]]></ST>
+]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

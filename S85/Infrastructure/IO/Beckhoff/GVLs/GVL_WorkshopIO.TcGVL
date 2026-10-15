@@ -2,10 +2,8 @@
 <TcPlcObject Version="1.1.0.1">
   <GVL Name="GVL_WorkshopIO" Id="{25c89f3f-8e8e-413a-98e1-365895cc7aa8}">
     <Declaration><![CDATA[VAR_GLOBAL
-{IF defined (WORKSHOP_HW)}
     bButton AT %I* : BOOL;
     bLightRelay AT %Q* : BOOL;
-{END_IF}
 END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>

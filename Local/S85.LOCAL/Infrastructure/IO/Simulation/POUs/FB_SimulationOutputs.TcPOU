@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SimulationOutputs" Id="{08E3C851-D0E5-481E-8958-AB550A9E3685}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SimulationOutputs
+VAR_INPUT
+    stOutputs : ST_HomeOutputs;
+END_VAR
+VAR_IN_OUT
+    bWorkshopLightRelay : BOOL;
+    bEntrywayLightRelay : BOOL;
+    bEntrywayTemporaryLightRelay : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bWorkshopLightRelay := stOutputs.Workshop.bLightRelay;
+bEntrywayLightRelay := stOutputs.Entryway.bLightRelay;
+bEntrywayTemporaryLightRelay := stOutputs.Entryway.bTemporaryLightRelay;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

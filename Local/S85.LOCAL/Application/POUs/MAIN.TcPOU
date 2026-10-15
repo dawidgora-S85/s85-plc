@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="MAIN" Id="{2f735285-04b2-4c14-80fd-338b9c439d52}">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+    fbHome : FB_Home;
+    fbSimulationInputs : FB_SimulationInputs;
+    fbSimulationOutputs : FB_SimulationOutputs;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+END_VAR
+]]>
+    </Declaration>
+    <Implementation>
+      <ST><![CDATA[fbSimulationInputs(
+    bWorkshopButton := GVL_WorkshopSimulation.bButton,
+    bEntrywayButton := GVL_EntrywaySimulation.bButton,
+    bEntrywayUpperButton := GVL_EntrywaySimulation.bUpperButton,
+    stInputs => stInputs
+);
+
+fbHome(
+    stInputs := stInputs,
+    stOutputs => stOutputs
+);
+
+fbSimulationOutputs(
+    stOutputs := stOutputs,
+    bWorkshopLightRelay := GVL_WorkshopSimulation.bLightRelay,
+    bEntrywayLightRelay := GVL_EntrywaySimulation.bLightRelay,
+    bEntrywayTemporaryLightRelay := GVL_EntrywaySimulation.bTemporaryLightRelay
+);]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

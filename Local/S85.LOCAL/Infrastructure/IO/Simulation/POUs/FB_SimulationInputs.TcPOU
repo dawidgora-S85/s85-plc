@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SimulationInputs" Id="{924E7A33-CF0F-446D-8DD8-457EE2C03F3D}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SimulationInputs
+VAR_INPUT
+    bWorkshopButton : BOOL;
+    bEntrywayButton : BOOL;
+    bEntrywayUpperButton : BOOL;
+END_VAR
+VAR_OUTPUT
+    stInputs : ST_HomeInputs;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[stInputs.Workshop.bButton := bWorkshopButton;
+stInputs.Entryway.bButton := bEntrywayButton;
+stInputs.Entryway.bUpperButton := bEntrywayUpperButton;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

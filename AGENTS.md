@@ -8,18 +8,30 @@
 
 ## PLC project structure
 
-- `S85.tsproj` owns system composition, task scheduling, EtherCAT configuration and I/O mappings.
-- `S85/S85.plcproj` owns `MAIN`, application integration, simulation and test code.
-- `S85.Core/S85.Core.tspproj` wraps the standalone PLC library in `S85.Core/S85_Core.plcproj`.
-- The Core library owns environment-independent application logic and contracts, including `FB_Home`, the Workshop and Entryway location blocks and contracts, `FB_Workshop`, `FB_Light` and `FB_Button`. Consumers reference it through Library Manager; hardware, simulation and tests stay in the application project.
+- `S85.sln` contains the `S85.PROD`, `S85.LOCAL` and `S85.Core` system projects.
+- `S85.PROD.tsproj` owns production system composition, task scheduling, EtherCAT configuration and I/O mappings.
+- The production system uses `S85/S85_PROD.plcproj`, PLC application `S85_PROD`, instance `S85_PROD Instance` and TMC `S85/S85_PROD.tmc`.
+- `Local/S85.LOCAL.tsproj` owns the local system. It uses `Local/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
+- `S85.Core/S85.Core.tspproj` wraps the shared PLC library in `S85.Core/S85_Core.plcproj`.
+- Core owns shared, environment-independent home logic and contracts. `Application` contains the home application and its DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs. `Domains/Lighting` and `Shared` remain unchanged.
+- `FB_Workshop` remains in `Locations/Workshop/POUs` as behavior separate from the `FB_Location_Workshop` contract adapter.
+- Both applications reference Core through Library Manager. PROD adapters connect hardware; LOCAL adapters connect simulation.
+- LOCAL uses x64 and keeps simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.
+- PROD uses ARMv8 and keeps physical Beckhoff I/O under `Infrastructure/IO/Beckhoff/{POUs,GVLs}`. It contains no simulation or TcUnit tests.
+- Production contains no test code or environment-switching compiler defines.
+- Keep the physical project roots `S85.Core/`, `Local/S85.LOCAL/` and `S85/`. The reorganized application folders do not change these disk roots.
 
 ## Documentation index
 
 - [TwinCAT XAE workflow](docs/twincat-xae.md): read before starting XAE, building PLC code or investigating toolchain failures.
-- [Workshop setup and checks](docs/workshop-light.md): read for Workshop logic, HW/SIM defines, I/O mappings, tests or commissioning checks.
+- [Workshop setup and checks](docs/workshop-light.md): read for hardware mappings, LOCAL simulation, tests and commissioning checks.
 
 ## Verification
 
-- Compile all relevant configurations before treating PLC changes as verified. Source review alone is not compilation evidence.
-- For Workshop changes, follow the HW/SIM build and isolated TcUnit requirements in its document. Report missing evidence explicitly.
+- Build only the affected system project. Do not use a solution-wide build for PROD or LOCAL verification.
+- For a clean rebuild, select the system project root in Solution Explorer and use native `Build.RebuildSelection`.
+- Use `Release | TwinCAT OS (ARMV8-A)` for PROD and the existing `Release | TwinCAT OS (x64)` configuration for LOCAL.
+- Confirm that Output reports `Rebuild All` for the selected project. Record `LastBuildInfo`, errors, warnings and fresh artifacts.
+- Run simulation and TcUnit tests only in LOCAL. Never include tests or simulation in the production project.
+- Source review alone is not compilation evidence. Report skipped verification explicitly.
 - Never deploy automatically to PROD. Activation, PLC download and runtime changes require explicit user authorization for the target and operation.

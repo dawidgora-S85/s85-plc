@@ -1,7 +1,8 @@
 # S85 PLC
 
-Beckhoff TwinCAT 3 PLC software for the S85 home automation system.
+TwinCAT 3 PLC software for the S85 home automation system.
 
-The current application controls one Workshop light with a local button, without MQTT.
+Core contains shared, environment-independent home logic. LOCAL provides simulation and TcUnit tests on x64. PROD connects to physical Beckhoff I/O on ARMv8.
 
-See [Workshop setup and checks](docs/workshop-light.md) for configuration and commissioning.
+See [TwinCAT XAE workflow](docs/twincat-xae.md) for project and build guidance.
+See [Workshop setup and checks](docs/workshop-light.md) for hardware and local tests.

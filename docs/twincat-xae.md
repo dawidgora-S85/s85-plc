@@ -1,56 +1,72 @@
 # TwinCAT XAE workflow
 
 Read this document for XAE startup, PLC builds and toolchain diagnostics.
-For compiler defines, I/O mappings and tests, read [Workshop setup and checks](workshop-light.md).
+For hardware mappings, read [Workshop setup and checks](workshop-light.md).
+For LOCAL runtime setup and test results, read [LOCAL runtime and tests](workshop-light.md#local-runtime-and-tests).
 
-## Confirmed environment and limits
+## Solution structure
 
-- Windows with TwinCAT XAE 4026.27 and TcXaeShell based on Visual Studio 2022.
-- PROD hardware mode (`WORKSHOP_HW`): build PASS on `Release | TwinCAT OS (ARMV8-A)`, with 0 PLC errors and 0 compiler warnings.
-- This is the verified hardware build, not a separate solution configuration named `PROD`.
-- SIM is unverified. Do not infer a SIM pass from the hardware build.
-- The verified route uses the TcXaeShell GUI and DTE from Windows PowerShell in STA.
-- A build generates local artifacts. It does not deploy them or verify runtime behavior on the controller.
+- `S85.sln` contains the PROD system, LOCAL system and shared Core library.
+- `S85.PROD.tsproj` is the production system project.
+- It uses `S85/S85_PROD.plcproj`, PLC application `S85_PROD` and instance `S85_PROD Instance`.
+- `Local/S85.LOCAL.tsproj` is the local system project.
+- It uses `Local/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
+- Both applications use the library in `S85.Core/S85_Core.plcproj` through `S85.Core/S85.Core.tspproj`.
 
-The 2026-10-13 baseline applies only to this environment and configuration.
-Build the configurations relevant to each PLC change and record fresh results in the PR.
+## PLC application layout
 
-## Prepare the solution
+- The physical project roots remain `S85.Core/`, `Local/S85.LOCAL/` and `S85/`.
+- Core's `Application` folder contains the home application DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs.
+- `Domains/Lighting` and `Shared` remain unchanged. `FB_Workshop` stays in `Locations/Workshop/POUs` as behavior separate from the `FB_Location_Workshop` contract adapter.
+- LOCAL uses x64, with simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.
+- PROD uses ARMv8 and physical Beckhoff I/O under `Infrastructure/IO/Beckhoff/{POUs,GVLs}`.
+- Core provides shared, environment-independent home logic. LOCAL provides simulation and TcUnit tests, while PROD connects to physical Beckhoff I/O.
 
-- `S85.sln` is tracked. It includes `S85.tsproj` and the standalone library wrapper `S85.Core/S85.Core.tspproj`.
-- The library code is in `S85.Core/S85_Core.plcproj`.
-- For a temporary project copy, copy `S85.sln` unchanged and preserve both relative project paths.
-- If `S85.sln` is missing, stop and report the prerequisite. Do not create a replacement for verification.
+## Build configurations
 
-## Verified build route
+- Build PROD with `Release | TwinCAT OS (ARMV8-A)`.
+- Build LOCAL with the existing `Release | TwinCAT OS (x64)` configuration.
+- PROD contains hardware application code only. LOCAL contains simulation and TcUnit tests.
+- Do not use compiler defines to switch between PROD and LOCAL.
 
-1. Start the TcXaeShell GUI normally.
-2. Start Windows PowerShell in STA, for example with `powershell.exe -NoProfile -STA`.
-3. Attach to the running instance using `Marshal.GetActiveObject("TcXaeShell.DTE.17.0")` from `System.Runtime.InteropServices`.
-4. Open the existing solution through DTE's `Solution.Open`. Use an unchanged temporary copy when protecting the working project from generated metadata.
-5. Check the active configuration and platform in XAE. Do not assume the platform from an earlier command or build.
-6. Call `SolutionBuild.Build(true)` on the DTE solution and wait for completion.
-7. Check `SolutionBuild.LastBuildInfo`: `0` means success. Inspect Output and Error List for the entire solution.
-8. Record the actual configuration, platform, errors, warnings and generated artifacts. Report unbuilt configurations separately.
+## Open the repository solution
 
-GUI startup, DTE attachment and compilation succeeded when launched from OpenCode.
-This does not establish that every unattended startup method works.
+1. Start TcXaeShell normally, without Administrator privileges.
+2. Open the repository solution at `C:\S85\s85-plc\S85.sln`.
+3. For DTE automation, use Windows PowerShell in STA, such as `powershell.exe -NoProfile -STA`.
+4. Attach with `Marshal.GetActiveObject("TcXaeShell.DTE.17.0")` from `System.Runtime.InteropServices`.
+5. Confirm `Solution.FullName` is the repository solution. Confirm the selected system project has the expected name, full path and GUID.
+6. Confirm the solution, projects and open documents are saved. Stop if XAE shows a conversion or repair prompt.
 
-## Diagnose failures by stage
+Do not create a temporary project copy for repository verification.
+Do not use `Save All` or discard dirty buffers to continue.
 
-- **XAE environment:** the tested CLI `/Build` invocation exited with code `1` before loading TwinCAT build packages or producing a build log.
-- Its cause remains unknown. Even with the solution present, that invocation did not provide compilation evidence.
-- Use the verified GUI/DTE route instead of assuming CLI support or changing the PLC project.
-- **Startup log:** `SyncLock called without an initialized synchronization object` comes from `Microsoft Visual Studio Appid Stub` during shell initialization.
-- The same message appears during successful GUI startup and compilation. It is not an established build blocker or a PLC compiler error.
-- **PLC compilation:** use the completed build result and compiler diagnostics, not shell startup messages, to identify PLC errors.
-- **Warnings:** report compiler warnings separately from errors and from XAE ActivityLog entries.
+## Scoped clean rebuild
+
+1. Select only the affected system project root in Solution Explorer.
+2. Select the project's required configuration and platform in XAE.
+3. Use native `Build.RebuildSelection`. It rebuilds the selected project with the native clean-and-build operation.
+4. Do not use solution-wide `Build`, `Rebuild` or `SolutionBuild.Build(true)` for PROD or LOCAL verification.
+5. Do not use `SolutionBuild.BuildProject` as evidence of a clean rebuild. It can perform an incremental build.
+6. Confirm Output says `Rebuild All` for the intended project and configuration.
+7. Record `SolutionBuild.LastBuildInfo`, errors, warnings, elapsed time and fresh artifact timestamps.
+
+`LastBuildInfo=0` means the build succeeded. Inspect the selected project's Output and Error List.
+A build creates local artifacts. It does not deploy them or verify controller runtime behavior.
+
+## Diagnose toolchain failures
+
+- A tested CLI `/Build` invocation exited with code `1` before loading TwinCAT build packages or producing a build log.
+- Its cause remains unknown. Do not assume CLI support or change project configuration to work around it.
+- A startup message about an uninitialized synchronization object can come from the Visual Studio shell.
+- Do not treat that message as a PLC compiler error when the build completed successfully.
+- Report compiler warnings separately from errors and XAE ActivityLog entries.
 
 ## Deployment boundary
 
-Do not activate a configuration, download PLC code or restart the runtime as part of build verification.
+Build verification is offline. Do not activate a configuration, download PLC code or restart a runtime.
 PROD deployment requires separate, explicit authorization for the target and operation.
-For authorized commissioning, follow the target and safety checks in [Workshop setup and checks](workshop-light.md#before-activation).
+For authorized commissioning, follow [Before activation](workshop-light.md#before-activation).
 
 ## Reference
 
