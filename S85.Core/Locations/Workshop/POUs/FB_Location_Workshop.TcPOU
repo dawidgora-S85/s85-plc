@@ -4,6 +4,7 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Workshop
 VAR_INPUT
     stInputs : ST_WorkshopInputs;
+    stCommand : ST_LightCommand;
 END_VAR
 
 VAR_OUTPUT
@@ -22,6 +23,8 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbWorkshop(
     bButton := stInputs.bButton,
+    bSetValid := stCommand.bValid AND (stCommand.sLocationId = cLocationId) AND (stCommand.sLightId = cMainLightId),
+    bTargetOn := stCommand.bTargetOn,
     bLightRelay => stOutputs.bLightRelay
 );
 

@@ -4,6 +4,8 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Workshop
 VAR_INPUT
     bButton : BOOL;
+    bSetValid : BOOL;
+    bTargetOn : BOOL;
 END_VAR
 
 VAR_OUTPUT
@@ -25,7 +27,11 @@ ELSIF bArmed THEN
     bToggle := TRUE;
 END_IF
 
-fbLight(bToggle := bToggle);
+fbLight(
+    bToggle := bToggle,
+    bSetValid := bSetValid,
+    bTargetOn := bTargetOn
+);
 bLightRelay := fbLight.bOn;]]></ST>
     </Implementation>
   </POU>

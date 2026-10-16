@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttLightProtocol" Id="{b18f36f3-fcf2-4122-8e1a-67e1d0d90b21}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightProtocol
+VAR_OUTPUT
+    nCount : UINT;
+    nRejectedQueue : UDINT;
+    nRejectedInput : UDINT;
+    bReady : BOOL;
+    nStateIndex : DINT;
+    sStateTopic : STRING(255);
+    sStatePayload : STRING(3);
+    bPublishPending : BOOL;
+END_VAR
+VAR
+    aQueue : ARRAY[1..16] OF ST_LightCommand;
+    nHead : UINT := 1;
+    aSentTopic : ARRAY[1..16] OF STRING(255);
+    aSentOn : ARRAY[1..16] OF BOOL;
+    aSentValid : ARRAY[1..16] OF BOOL;
+    nPendingIndex : DINT;
+    sPendingTopic : STRING(255);
+    bPendingOn : BOOL;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="Reset" Id="{c6b8309b-460b-4f70-b769-36e11ca7be5c}">
+      <Declaration><![CDATA[METHOD PUBLIC Reset
+VAR
+    i : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nHead := 1;
+nCount := 0;
+bPublishPending := FALSE;
+nPendingIndex := 0;
+FOR i := 1 TO 16 DO
+    aQueue[i].bValid := FALSE;
+    aSentValid[i] := FALSE;
+END_FOR]]></ST></Implementation>
+    </Method>
+    <Method Name="SetConnection" Id="{fa095f20-95fd-43e8-8b11-4914a0d583e9}">
+      <Declaration><![CDATA[METHOD PUBLIC SetConnection
+VAR_INPUT
+    bNewReady : BOOL;
+END_VAR
+VAR
+    i : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF bNewReady <> bReady THEN
+    nHead := 1;
+    nCount := 0;
+    bPublishPending := FALSE;
+    nPendingIndex := 0;
+    FOR i := 1 TO 16 DO
+        aQueue[i].bValid := FALSE;
+    END_FOR
+    IF bNewReady THEN
+        FOR i := 1 TO 16 DO
+            aSentValid[i] := FALSE;
+        END_FOR
+    END_IF
+END_IF
+bReady := bNewReady;]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildTopic" Id="{eef997cf-d1dd-4653-9437-99d271bfc2b5}">
+      <Declaration><![CDATA[METHOD PUBLIC BuildTopic : STRING(255)
+VAR_INPUT
+    sLocationId : STRING(16);
+    sLightId : STRING(16);
+    sSuffix : STRING(8);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[BuildTopic := CONCAT('s85/locations/', sLocationId);
+BuildTopic := CONCAT(BuildTopic, '/lights/');
+BuildTopic := CONCAT(BuildTopic, sLightId);
+BuildTopic := CONCAT(BuildTopic, '/');
+BuildTopic := CONCAT(BuildTopic, sSuffix);]]></ST></Implementation>
+    </Method>
+    <Method Name="Receive" Id="{7d87b4c7-12e3-47a8-83c4-9e958d73c555}">
+      <Declaration><![CDATA[METHOD PUBLIC Receive : BOOL
+VAR_INPUT
+    sTopic : STRING(255);
+    sPayload : STRING(8);
+    nPayloadSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR
+    i : DINT;
+    nTail : UINT;
+
+    bTargetOn : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[Receive := FALSE;
+IF (UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1) > 16 THEN
+    nRejectedInput := nRejectedInput + 1;
+    RETURN;
+END_IF
+IF NOT bReady OR (nPayloadSize <> INT_TO_UDINT(LEN(sPayload))) THEN
+    nRejectedInput := nRejectedInput + 1;
+    RETURN;
+END_IF
+IF (sPayload = 'ON') AND (nPayloadSize = 2) THEN
+    bTargetOn := TRUE;
+ELSIF (sPayload = 'OFF') AND (nPayloadSize = 3) THEN
+    bTargetOn := FALSE;
+ELSE
+    nRejectedInput := nRejectedInput + 1;
+    RETURN;
+END_IF
+FOR i := LOWER_BOUND(aLights, 1) TO UPPER_BOUND(aLights, 1) DO
+    IF sTopic = BuildTopic(sLocationId := aLights[i].sLocationId, sLightId := aLights[i].sId, sSuffix := 'set') THEN
+        IF nCount >= 16 THEN
+            nRejectedQueue := nRejectedQueue + 1;
+            RETURN;
+        END_IF
+        nTail := nHead + nCount;
+        IF nTail > 16 THEN
+            nTail := nTail - 16;
+        END_IF
+        aQueue[nTail].sLocationId := aLights[i].sLocationId;
+        aQueue[nTail].sLightId := aLights[i].sId;
+        aQueue[nTail].bTargetOn := bTargetOn;
+        aQueue[nTail].bValid := TRUE;
+        nCount := nCount + 1;
+        Receive := TRUE;
+        RETURN;
+    END_IF
+END_FOR
+nRejectedInput := nRejectedInput + 1;]]></ST></Implementation>
+    </Method>
+    <Method Name="Pop" Id="{be83d102-31ee-4367-9d51-aa8508a5ce89}">
+      <Declaration><![CDATA[METHOD PUBLIC Pop : ST_LightCommand
+]]></Declaration>
+      <Implementation><ST><![CDATA[Pop.bValid := FALSE;
+IF bReady AND (nCount > 0) THEN
+    Pop := aQueue[nHead];
+    aQueue[nHead].bValid := FALSE;
+    nHead := nHead + 1;
+    IF nHead > 16 THEN
+        nHead := 1;
+    END_IF
+    nCount := nCount - 1;
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="PlanState" Id="{169aeef9-0491-4bd2-8da2-c12b9a996ba8}">
+      <Declaration><![CDATA[METHOD PUBLIC PlanState
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR
+    i : DINT;
+    nSlot : DINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[bPublishPending := FALSE;
+nStateIndex := 0;
+sStateTopic := '';
+sStatePayload := '';
+IF NOT bReady THEN
+    RETURN;
+END_IF
+IF (UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1) > 16 THEN
+    RETURN;
+END_IF
+FOR i := LOWER_BOUND(aLights, 1) TO UPPER_BOUND(aLights, 1) DO
+    nSlot := i - LOWER_BOUND(aLights, 1) + 1;
+    IF NOT aSentValid[nSlot] OR (aSentTopic[nSlot] <> BuildTopic(sLocationId := aLights[i].sLocationId, sLightId := aLights[i].sId, sSuffix := 'state')) OR (aSentOn[nSlot] <> aLights[i].bOn) THEN
+        nStateIndex := i;
+        sStateTopic := BuildTopic(sLocationId := aLights[i].sLocationId, sLightId := aLights[i].sId, sSuffix := 'state');
+        IF aLights[i].bOn THEN
+            sStatePayload := 'ON';
+        ELSE
+            sStatePayload := 'OFF';
+        END_IF
+        nPendingIndex := nSlot;
+        sPendingTopic := sStateTopic;
+        bPendingOn := aLights[i].bOn;
+        bPublishPending := TRUE;
+        RETURN;
+    END_IF
+END_FOR]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmPublish" Id="{0eeb70fd-150b-424f-a316-e5e20c347fd2}">
+      <Declaration><![CDATA[METHOD PUBLIC ConfirmPublish
+VAR_INPUT
+    bAccepted : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF bPublishPending AND bAccepted THEN
+    aSentTopic[nPendingIndex] := sPendingTopic;
+    aSentOn[nPendingIndex] := bPendingOn;
+    aSentValid[nPendingIndex] := TRUE;
+END_IF
+bPublishPending := FALSE;
+nPendingIndex := 0;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

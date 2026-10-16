@@ -1,0 +1,29 @@
+mqtt:
+  light:
+    - name: Workshop Main
+      unique_id: s85_workshop_main
+      command_topic: s85/locations/H.01-09/lights/main/set
+      state_topic: s85/locations/H.01-09/lights/main/state
+      payload_on: "ON"
+      payload_off: "OFF"
+      qos: 1
+      retain: false
+      optimistic: false
+    - name: Entryway Main
+      unique_id: s85_entryway_main
+      command_topic: s85/locations/H.01-01/lights/main/set
+      state_topic: s85/locations/H.01-01/lights/main/state
+      payload_on: "ON"
+      payload_off: "OFF"
+      qos: 1
+      retain: false
+      optimistic: false
+    - name: Entryway Temporary
+      unique_id: s85_entryway_temporary
+      command_topic: s85/locations/H.01-01/lights/temporary/set
+      state_topic: s85/locations/H.01-01/lights/temporary/state
+      payload_on: "ON"
+      payload_off: "OFF"
+      qos: 1
+      retain: false
+      optimistic: false

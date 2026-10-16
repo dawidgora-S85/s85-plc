@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_LightCommandTests" Id="{34a8a44c-7195-45ad-9fc9-531de9037237}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LightCommandTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[AllThreeRoutesAreAbsoluteAndIndependent();
+InvalidCommandsDoNothing();
+DuplicateSetIsIdempotent();
+PhysicalPressWinsOverSet();
+StartupHighAndCommandValidity();]]></ST>
+    </Implementation>
+    <Method Name="AllThreeRoutesAreAbsoluteAndIndependent" Id="{ef78e31d-e847-4e59-ac81-65ed5ad8d81c}">
+      <Declaration><![CDATA[METHOD PRIVATE AllThreeRoutesAreAbsoluteAndIndependent
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Absolute commands route ON and OFF independently to all three semantic light IDs');
+
+stCommand.bValid := TRUE;
+stCommand.sLocationId := 'H.01-09';
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Workshop main ON routes only to Workshop');
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[1].bOn, Message := 'Workshop main OFF is absolute');
+
+stCommand.sLocationId := 'H.01-01';
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Entryway main ON routes only to Entryway main');
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[2].bOn, Message := 'Entryway main OFF is absolute');
+
+stCommand.sLightId := 'temporary';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Entryway temporary ON routes only to temporary light');
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[3].bOn, Message := 'Entryway temporary OFF is absolute');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="InvalidCommandsDoNothing" Id="{bf28a4fb-c9b3-40a1-a8b0-1a794e8bb96c}">
+      <Declaration><![CDATA[METHOD PRIVATE InvalidCommandsDoNothing
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Invalid flag, location, and light IDs do not change any output');
+
+stCommand.bValid := TRUE;
+stCommand.sLocationId := 'H.01-09';
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stCommand.bValid := FALSE;
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn, Message := 'Invalid flag does not clear Workshop main');
+
+stCommand.bValid := TRUE;
+stCommand.sLocationId := 'bad-location';
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Unknown location does not route');
+stCommand.sLocationId := 'H.01-09';
+stCommand.sLightId := 'bad-light';
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Unknown light does not route');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="DuplicateSetIsIdempotent" Id="{cc254ed4-490b-4a21-9452-e2a85ac83c01}">
+      <Declaration><![CDATA[METHOD PRIVATE DuplicateSetIsIdempotent
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Repeated absolute SET does not toggle the light');
+
+stCommand.bValid := TRUE;
+stCommand.sLocationId := 'H.01-09';
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn, Message := 'Duplicate ON remains ON');
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertFalse(Condition := fbHome.aLights[1].bOn, Message := 'Duplicate OFF remains OFF');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="PhysicalPressWinsOverSet" Id="{107e9022-ae50-4a70-b473-12cae86eeb32}">
+      <Declaration><![CDATA[METHOD PRIVATE PhysicalPressWinsOverSet
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Physical press toggles previous state instead of applying simultaneous SET');
+
+stInputs.Workshop.bButton := FALSE;
+stCommand.bValid := TRUE;
+stCommand.sLocationId := 'H.01-09';
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stInputs.Workshop.bButton := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn, Message := 'Press from OFF wins over simultaneous SET OFF');
+
+stInputs.Workshop.bButton := FALSE;
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stInputs.Workshop.bButton := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertFalse(Condition := fbHome.aLights[1].bOn, Message := 'Press from ON wins over simultaneous SET ON');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="StartupHighAndCommandValidity" Id="{667d37c7-3812-474f-b2af-22adbc9671a2}">
+      <Declaration><![CDATA[METHOD PRIVATE StartupHighAndCommandValidity
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Startup-high is ignored and invalid command is not held for later scans');
+
+stInputs.Workshop.bButton := TRUE;
+stCommand.bValid := FALSE;
+stCommand.sLocationId := 'H.01-09';
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertFalse(Condition := fbHome.aLights[1].bOn, Message := 'Startup-high button does not toggle');
+stInputs.Workshop.bButton := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertFalse(Condition := fbHome.aLights[1].bOn, Message := 'Invalid command remains unapplied on release');
+stInputs.Workshop.bButton := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn, Message := 'A fresh press toggles after startup-high release');
+stInputs.Workshop.bButton := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stCommand.bValid := TRUE;
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stCommand.bValid := FALSE;
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[1].bOn, Message := 'Invalid command does not reapply stale OFF target');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

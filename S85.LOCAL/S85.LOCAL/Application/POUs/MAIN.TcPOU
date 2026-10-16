@@ -4,13 +4,26 @@
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
     fbHome : FB_Home;
+    {attribute 'TcNoSymbol'}
+    fbMqttIntegration : FB_MqttIntegration;
+    {attribute 'TcNoSymbol'}
+    fbMqttConfigLoader : FB_MqttConfigLoader;
     fbSimulationInputs : FB_SimulationInputs;
     fbSimulationOutputs : FB_SimulationOutputs;
     stInputs : ST_HomeInputs;
     stOutputs : ST_HomeOutputs;
-END_VAR
-]]>
-    </Declaration>
+    {attribute 'TcNoSymbol'}
+    stMqttConfig : ST_MqttConfig;
+    stLightCommand : ST_LightCommand;
+    bHomeInitialized : BOOL;
+    bMqttReady : BOOL;
+    bMqttError : BOOL;
+    nMqttConfigError : UDINT;
+    nMqttSystemError : UDINT;
+    hrMqttError : HRESULT;
+    nMqttRejectedQueue : UDINT;
+    nMqttRejectedMessages : UDINT;
+END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbSimulationInputs(
     bWorkshopButton := GVL_WorkshopSimulation.bButton,
@@ -19,17 +32,48 @@ END_VAR
     stInputs => stInputs
 );
 
+fbMqttConfigLoader.Cycle(
+    sConfigFilePath := 'C:\ProgramData\S85\config\mqtt.conf',
+    sSecretsFilePath := 'C:\ProgramData\S85\secrets\mqtt.conf'
+);
+fbMqttConfigLoader.GetConfig(stResult := stMqttConfig);
+
+IF bHomeInitialized THEN
+    fbMqttIntegration.ReceiveCycle(
+        aLights := fbHome.aLights,
+        stConfig := stMqttConfig,
+        bConfigurationReady := fbMqttConfigLoader.bReady
+    );
+    stLightCommand := fbMqttIntegration.PopCommand();
+ELSE
+    stLightCommand.bValid := FALSE;
+END_IF
+
 fbHome(
     stInputs := stInputs,
+    stCommand := stLightCommand,
     stOutputs => stOutputs
 );
+bHomeInitialized := TRUE;
 
 fbSimulationOutputs(
     stOutputs := stOutputs,
     bWorkshopLightRelay := GVL_WorkshopSimulation.bLightRelay,
     bEntrywayLightRelay := GVL_EntrywaySimulation.bLightRelay,
     bEntrywayTemporaryLightRelay := GVL_EntrywaySimulation.bTemporaryLightRelay
-);]]></ST>
+);
+
+IF bHomeInitialized THEN
+    fbMqttIntegration.PublishCycle(aLights := fbHome.aLights);
+END_IF
+
+bMqttReady := fbMqttIntegration.bConnected AND fbMqttIntegration.bSubscriptionsAccepted;
+bMqttError := fbMqttConfigLoader.bError OR fbMqttIntegration.bError OR fbMqttIntegration.bConfigurationError;
+nMqttConfigError := fbMqttConfigLoader.nErrorCode;
+nMqttSystemError := fbMqttConfigLoader.nSystemErrorCode;
+hrMqttError := fbMqttIntegration.hrErrorCode;
+nMqttRejectedQueue := fbMqttIntegration.nRejectedQueue;
+nMqttRejectedMessages := fbMqttIntegration.nRejectedMessages;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>
