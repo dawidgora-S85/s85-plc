@@ -12,6 +12,7 @@ VAR
     fbLightCommandTests : FB_LightCommandTests;
     fbMqttLightProtocolTests : FB_MqttLightProtocolTests;
     fbMqttConfigParserTests : FB_MqttConfigParserTests;
+    fbMqttIntegrationQueueTests : FB_MqttIntegrationQueueTests;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[TcUnit.RUN();]]></ST>

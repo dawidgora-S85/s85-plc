@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttIntegrationQueueProbe" Id="{dff8de19-a022-41af-9e1d-fc1f561c42ac}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueProbe EXTENDS S85Core.FB_MqttIntegration]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="ResetQueueForTest" Id="{4b4477f1-537c-4a85-9a82-38370ae9eb70}">
+      <Declaration><![CDATA[METHOD PUBLIC ResetQueueForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[ResetQueueForTest := ResetMessageQueue();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttIntegrationQueueTests" Id="{2729f28e-1d87-48d7-9e91-895c992b69c1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[EmptyQueueResetCanBeRepeated();
+ProductionQueueResetHelperCanBeRepeated();]]></ST></Implementation>
+    <Method Name="EmptyQueueResetCanBeRepeated" Id="{18d680fc-594f-4897-a31d-43221962500c}">
+      <Declaration><![CDATA[METHOD PRIVATE EmptyQueueResetCanBeRepeated
+VAR
+    fbMessageQueue : FB_IotMqtt5MessageQueue;
+    bResetResult : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Empty MQTT message queue can be reset repeatedly even when ResetQueue returns FALSE');
+AssertTrue(Condition := fbMessageQueue.nQueuedMessages = 0, Message := 'Fresh queue starts empty');
+bResetResult := fbMessageQueue.ResetQueue();
+AssertFalse(Condition := bResetResult, Message := 'ResetQueue returns FALSE for an already empty queue');
+AssertTrue(Condition := fbMessageQueue.nQueuedMessages = 0, Message := 'Queue remains empty after first reset');
+bResetResult := fbMessageQueue.ResetQueue();
+AssertFalse(Condition := bResetResult, Message := 'Repeated empty queue reset returns FALSE');
+AssertTrue(Condition := fbMessageQueue.nQueuedMessages = 0, Message := 'Queue remains empty after repeated reset');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ProductionQueueResetHelperCanBeRepeated" Id="{39d46cb4-cae3-433a-9a75-6f6a34b3479a}">
+      <Declaration><![CDATA[METHOD PRIVATE ProductionQueueResetHelperCanBeRepeated
+VAR
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Production MQTT queue reset helper completes repeatedly for an empty queue');
+AssertTrue(Condition := fbProbe.ResetQueueForTest(), Message := 'Production helper accepts empty queue after reset');
+AssertTrue(Condition := fbProbe.ResetQueueForTest(), Message := 'Production helper accepts repeated empty queue reset');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

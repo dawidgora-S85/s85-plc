@@ -169,8 +169,7 @@ IF bConnected THEN
         bSubscriptionsAccepted := FALSE;
     END_IF
     IF NOT bQueueResetComplete THEN
-        bResetResult := fbClient.fbMessageQueue.ResetQueue();
-        IF bResetResult THEN
+        IF ResetMessageQueue() THEN
             nLastLostMessages := fbClient.fbMessageQueue.nLostMessages;
             bQueueResetComplete := TRUE;
         END_IF
@@ -187,8 +186,7 @@ ELSE
         bQueueResetComplete := FALSE;
         bSubscriptionsAccepted := FALSE;
     END_IF
-    bResetResult := fbClient.fbMessageQueue.ResetQueue();
-    IF bResetResult THEN
+    IF ResetMessageQueue() THEN
         nLastLostMessages := fbClient.fbMessageQueue.nLostMessages;
         bQueueResetComplete := TRUE;
         IF bSessionPresentRejected THEN
@@ -283,6 +281,14 @@ IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
 END_IF
 nRejectedQueue := fbProtocol.nRejectedQueue;
 nRejectedMessages := nRejectedTransportMessages + fbProtocol.nRejectedInput;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ResetMessageQueue" Id="{8f41c86c-50c0-4d24-9780-4c0a9caa05f8}">
+      <Declaration><![CDATA[METHOD PROTECTED ResetMessageQueue : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[(* Tc3_IotBase 3.6.7.0 returns FALSE when the queue was already empty. *)
+bResetResult := fbClient.fbMessageQueue.ResetQueue();
+ResetMessageQueue := fbClient.fbMessageQueue.nQueuedMessages = 0;]]></ST>
       </Implementation>
     </Method>
   </POU>
