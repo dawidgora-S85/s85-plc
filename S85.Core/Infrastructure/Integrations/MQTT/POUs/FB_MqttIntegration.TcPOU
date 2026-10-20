@@ -26,12 +26,6 @@ VAR
     nPayloadSize : UDINT;
     nTopicCapacity : UINT;
     nPayloadCapacity : UDINT;
-    bDiagGetTopicCalled : BOOL;
-    bDiagGetTopicResult : BOOL;
-    nDiagTopicSize : UDINT;
-    nDiagTopicLength : UDINT;
-    byDiagTopicLastByte : BYTE;
-    bDiagTopicLastByteValid : BOOL;
     nNextSubscription : DINT;
     nQueueScan : UINT;
     nLastLostMessages : UDINT;
@@ -42,6 +36,8 @@ VAR
     bDisconnectForQueue : BOOL;
     bResetResult : BOOL;
     bMessageReceived : BOOL;
+    bTopicReceived : BOOL;
+    bPayloadReceived : BOOL;
     bSubscriptionAccepted : BOOL;
     bConfigValid : BOOL;
     bUsernamePresent : BOOL;
@@ -256,40 +252,30 @@ IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
         nPayloadSize := fbMessage.nPayloadSize;
         sTopic := '';
         sPayload := '';
-        bDiagGetTopicCalled := FALSE;
-        bDiagGetTopicResult := FALSE;
-        nDiagTopicSize := fbMessage.nTopicSize;
-        nDiagTopicLength := 0;
-        byDiagTopicLastByte := 0;
-        bDiagTopicLastByteValid := FALSE;
         IF (nTopicSize > 0) AND (nTopicSize < SIZEOF(sTopic))
             AND ((nPayloadSize = 2) OR (nPayloadSize = 3)) THEN
             nTopicCapacity := SIZEOF(sTopic);
-            bDiagGetTopicCalled := TRUE;
-            bDiagGetTopicResult := fbMessage.GetTopic(pTopic := ADR(sTopic), nTopicSize := nTopicCapacity);
-            nDiagTopicLength := INT_TO_UDINT(LEN(sTopic));
-            IF (nDiagTopicSize > 0) AND (nDiagTopicSize <= SIZEOF(sTopic)) THEN
-                (* STRING indexing is zero-based: inspect the last declared byte, not an assumed NUL. *)
-                byDiagTopicLastByte := sTopic[nDiagTopicSize - 1];
-                bDiagTopicLastByteValid := TRUE;
-            END_IF
-            IF INT_TO_UDINT(LEN(sTopic)) = nTopicSize THEN
-                nPayloadCapacity := SIZEOF(sPayload);
-                fbMessage.GetPayload(
-                    pPayload := ADR(sPayload),
-                    nPayloadSize := nPayloadCapacity,
-                    bSetNullTermination := TRUE
+            bTopicReceived := fbMessage.GetTopic(pTopic := ADR(sTopic), nTopicSize := nTopicCapacity);
+            nPayloadCapacity := SIZEOF(sPayload);
+            bPayloadReceived := fbMessage.GetPayload(
+                pPayload := ADR(sPayload),
+                nPayloadSize := nPayloadCapacity,
+                bSetNullTermination := TRUE
+            );
+            IF ValidateCopiedMessage(
+                bTopicReceived := bTopicReceived,
+                nTopicSize := nTopicSize,
+                sTopic := sTopic,
+                bPayloadReceived := bPayloadReceived,
+                nPayloadSize := nPayloadSize,
+                sPayload := sPayload
+            ) THEN
+                fbProtocol.Receive(
+                    sTopic := sTopic,
+                    sPayload := sPayload,
+                    nPayloadSize := nPayloadSize,
+                    aLights := aLights
                 );
-                IF INT_TO_UDINT(LEN(sPayload)) = nPayloadSize THEN
-                    fbProtocol.Receive(
-                        sTopic := sTopic,
-                        sPayload := sPayload,
-                        nPayloadSize := nPayloadSize,
-                        aLights := aLights
-                    );
-                ELSE
-                    nRejectedTransportMessages := nRejectedTransportMessages + 1;
-                END_IF
             ELSE
                 nRejectedTransportMessages := nRejectedTransportMessages + 1;
             END_IF
@@ -300,6 +286,73 @@ IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
 END_IF
 nRejectedQueue := fbProtocol.nRejectedQueue;
 nRejectedMessages := nRejectedTransportMessages + fbProtocol.nRejectedInput;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ValidateCopiedMessage" Id="{2a13be2d-ec11-46b9-92a5-ed3cad3200c1}">
+      <Declaration><![CDATA[METHOD PROTECTED ValidateCopiedMessage : BOOL
+VAR_INPUT
+    bTopicReceived : BOOL;
+    nTopicSize : UDINT;
+    bPayloadReceived : BOOL;
+    nPayloadSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    sTopic : STRING(255);
+    sPayload : STRING(3);
+END_VAR
+VAR
+    nTopicLength : UDINT;
+    nPayloadLength : UDINT;
+    nScan : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ValidateCopiedMessage := FALSE;
+IF NOT bTopicReceived OR NOT bPayloadReceived THEN
+    RETURN;
+END_IF
+IF (nTopicSize = 0) OR (nTopicSize >= SIZEOF(sTopic)) THEN
+    RETURN;
+END_IF
+IF (nPayloadSize <> 2) AND (nPayloadSize <> 3) THEN
+    RETURN;
+END_IF
+
+nTopicLength := SIZEOF(sTopic);
+FOR nScan := 0 TO SIZEOF(sTopic) - 1 DO
+    IF sTopic[nScan] = 0 THEN
+        nTopicLength := nScan;
+        EXIT;
+    END_IF
+END_FOR
+IF nTopicLength = SIZEOF(sTopic) THEN
+    RETURN;
+END_IF
+IF nTopicLength = 0 THEN
+    RETURN;
+END_IF
+IF nTopicSize <> nTopicLength THEN
+    (* Accept only exact content length or one verified final NUL; do not assume a universal size convention. *)
+    IF nTopicSize <> nTopicLength + 1 THEN
+        RETURN;
+    END_IF
+    IF sTopic[nTopicSize - 1] <> 0 THEN
+        RETURN;
+    END_IF
+END_IF
+
+nPayloadLength := SIZEOF(sPayload);
+FOR nScan := 0 TO SIZEOF(sPayload) - 1 DO
+    IF sPayload[nScan] = 0 THEN
+        nPayloadLength := nScan;
+        EXIT;
+    END_IF
+END_FOR
+IF nPayloadLength = SIZEOF(sPayload) THEN
+    RETURN;
+END_IF
+IF nPayloadLength <> nPayloadSize THEN
+    RETURN;
+END_IF
+ValidateCopiedMessage := TRUE;]]></ST>
       </Implementation>
     </Method>
     <Method Name="ResetMessageQueue" Id="{8f41c86c-50c0-4d24-9780-4c0a9caa05f8}">
