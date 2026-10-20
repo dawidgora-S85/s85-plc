@@ -26,6 +26,12 @@ VAR
     nPayloadSize : UDINT;
     nTopicCapacity : UINT;
     nPayloadCapacity : UDINT;
+    bDiagGetTopicCalled : BOOL;
+    bDiagGetTopicResult : BOOL;
+    nDiagTopicSize : UDINT;
+    nDiagTopicLength : UDINT;
+    byDiagTopicLastByte : BYTE;
+    bDiagTopicLastByteValid : BOOL;
     nNextSubscription : DINT;
     nQueueScan : UINT;
     nLastLostMessages : UDINT;
@@ -250,10 +256,23 @@ IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
         nPayloadSize := fbMessage.nPayloadSize;
         sTopic := '';
         sPayload := '';
+        bDiagGetTopicCalled := FALSE;
+        bDiagGetTopicResult := FALSE;
+        nDiagTopicSize := fbMessage.nTopicSize;
+        nDiagTopicLength := 0;
+        byDiagTopicLastByte := 0;
+        bDiagTopicLastByteValid := FALSE;
         IF (nTopicSize > 0) AND (nTopicSize < SIZEOF(sTopic))
             AND ((nPayloadSize = 2) OR (nPayloadSize = 3)) THEN
             nTopicCapacity := SIZEOF(sTopic);
-            fbMessage.GetTopic(pTopic := ADR(sTopic), nTopicSize := nTopicCapacity);
+            bDiagGetTopicCalled := TRUE;
+            bDiagGetTopicResult := fbMessage.GetTopic(pTopic := ADR(sTopic), nTopicSize := nTopicCapacity);
+            nDiagTopicLength := INT_TO_UDINT(LEN(sTopic));
+            IF (nDiagTopicSize > 0) AND (nDiagTopicSize <= SIZEOF(sTopic)) THEN
+                (* STRING indexing is zero-based: inspect the last declared byte, not an assumed NUL. *)
+                byDiagTopicLastByte := sTopic[nDiagTopicSize - 1];
+                bDiagTopicLastByteValid := TRUE;
+            END_IF
             IF INT_TO_UDINT(LEN(sTopic)) = nTopicSize THEN
                 nPayloadCapacity := SIZEOF(sPayload);
                 fbMessage.GetPayload(
