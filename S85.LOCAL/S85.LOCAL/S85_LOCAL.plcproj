@@ -48,6 +48,21 @@
     <Compile Include="Tests\Application\POUs\FB_LightCatalogTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Tests\Application\POUs\FB_LightCommandTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Application\POUs\FB_MqttLightProtocolTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Application\POUs\FB_MqttConfigParserTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Application\POUs\FB_MqttIntegrationQueueProbe.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Tests\Application\POUs\FB_MqttIntegrationQueueTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Tests\Application\POUs\FB_LocalIntegrationTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -83,6 +98,10 @@
     <PlaceholderReference Include="Tc2_System">
       <DefaultResolution>Tc2_System, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_System</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc3_IotBase">
+      <DefaultResolution>Tc3_IotBase, 3.6.7.0 (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc3_IotBase</Namespace>
     </PlaceholderReference>
     <PlaceholderReference Include="Tc3_Module">
       <DefaultResolution>Tc3_Module, * (Beckhoff Automation GmbH)</DefaultResolution>

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttConfigParserTests" Id="{b780eb20-74b4-49c5-8750-46480adf79d1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttConfigParserTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[AcceptCrLfTlsAndNoFinalNewline();
+RejectInvalidConfigRecords();
+RejectInvalidSecretRecords();
+RejectNulAndOversizeAndAcceptLimit();]]></ST></Implementation>
+    <Method Name="AcceptCrLfTlsAndNoFinalNewline" Id="{47352f66-d6f4-4fcf-b8a6-6798d21e54a0}">
+      <Declaration><![CDATA[METHOD PRIVATE AcceptCrLfTlsAndNoFinalNewline
+VAR
+    fbParser : FB_MqttConfigParser;
+    aData : ARRAY[0..2048] OF BYTE;
+    sConfig : STRING(255);
+    sSecrets : STRING(255);
+    nLength : UDINT;
+    stConfig : ST_MqttConfig;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Parser accepts CRLF, no final newline, TLS fields, and equals in a synthetic password');
+sConfig := 'MQTT_HOST=broker.test$R$NMQTT_PORT=8883$R$NMQTT_CLIENT_ID=unit-test$R$NMQTT_TLS=true$R$NMQTT_CA_FILE=/test/ca.pem';
+MEMSET(ADR(aData), 0, SIZEOF(aData));
+nLength := INT_TO_UDINT(LEN(sConfig));
+MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertTrue(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Valid synthetic TLS configuration parses');
+sSecrets := 'MQTT_USERNAME=test-user$R$NMQTT_PASSWORD=synthetic=pass';
+MEMSET(ADR(aData), 0, SIZEOF(aData));
+nLength := INT_TO_UDINT(LEN(sSecrets));
+MEMCPY(ADR(aData), ADR(sSecrets), nLength);
+AssertTrue(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := TRUE), Message := 'Valid synthetic credentials parse without final newline');
+AssertTrue(Condition := fbParser.GetConfig(stResult := stConfig), Message := 'Complete parser config is available');
+AssertTrue(Condition := stConfig.sHostName = 'broker.test' AND (stConfig.nHostPort = 8883) AND stConfig.bUseTls AND (stConfig.sCAFile = '/test/ca.pem'), Message := 'TLS settings and numeric port are retained');
+AssertTrue(Condition := (stConfig.sUserName = 'test-user') AND (stConfig.sUserPassword = 'synthetic=pass'), Message := 'Synthetic credentials preserve exact values');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectInvalidConfigRecords" Id="{122c3124-01e9-4594-b357-d13a5f40565e}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectInvalidConfigRecords
+VAR
+    fbParser : FB_MqttConfigParser;
+    aData : ARRAY[0..2048] OF BYTE;
+    sConfig : STRING(255);
+    nLength : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Parser rejects blank, duplicate, unknown, misplaced, nondecimal, and overflow config values');
+sConfig := 'MQTT_HOST=$R$NMQTT_PORT=1883$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Blank required host rejected');
+
+fbParser.Reset();
+sConfig := 'MQTT_HOST=broker$R$NMQTT_PORT=1883$R$NMQTT_PORT=1884$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Duplicate config key rejected');
+
+fbParser.Reset();
+sConfig := 'MQTT_HOST=broker$R$NMQTT_PORT=1883$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=$R$NMQTT_UNKNOWN=value';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Unknown key rejected');
+
+fbParser.Reset();
+sConfig := 'MQTT_HOST=broker$R$NMQTT_PORT=1883$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=$R$NMQTT_PASSWORD=wrong-file';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Secrets key in nonsecret file rejected');
+
+fbParser.Reset();
+sConfig := 'MQTT_HOST=broker$R$NMQTT_PORT=18x3$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Nondecimal port rejected');
+
+fbParser.Reset();
+sConfig := 'MQTT_HOST=broker$R$NMQTT_PORT=65536$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Port above UINT range rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectInvalidSecretRecords" Id="{26f4c69a-0c3a-4cc8-b95d-7ea170a97080}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectInvalidSecretRecords
+VAR
+    fbParser : FB_MqttConfigParser;
+    aData : ARRAY[0..2048] OF BYTE;
+    sConfig : STRING(255);
+    sSecrets : STRING(255);
+    nLength : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Parser rejects blank, duplicate, and unknown secret entries');
+sConfig := 'MQTT_HOST=broker$R$NMQTT_PORT=1883$R$NMQTT_CLIENT_ID=unit$R$NMQTT_TLS=false$R$NMQTT_CA_FILE=';
+sSecrets := 'MQTT_USERNAME=$R$NMQTT_PASSWORD=synthetic';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+AssertTrue(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Config prerequisite parses');
+nLength := INT_TO_UDINT(LEN(sSecrets)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sSecrets), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := TRUE), Message := 'Blank username rejected');
+
+fbParser.Reset();
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE);
+sSecrets := 'MQTT_USERNAME=synthetic$R$NMQTT_PASSWORD=one$R$NMQTT_PASSWORD=two';
+nLength := INT_TO_UDINT(LEN(sSecrets)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sSecrets), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := TRUE), Message := 'Duplicate secret rejected');
+
+fbParser.Reset();
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE);
+sSecrets := 'MQTT_USERNAME=synthetic$R$NUNKNOWN=value$R$NMQTT_PASSWORD=test';
+nLength := INT_TO_UDINT(LEN(sSecrets)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sSecrets), nLength);
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := TRUE), Message := 'Unknown secret key rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectNulAndOversizeAndAcceptLimit" Id="{b64d3e52-9eea-42d7-951a-7a0e1d174834}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectNulAndOversizeAndAcceptLimit
+VAR
+    fbParser : FB_MqttConfigParser;
+    aData : ARRAY[0..2048] OF BYTE;
+    sConfig : STRING(255);
+    nLength : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Parser rejects embedded NUL and oversize input while accepting the 2048-byte limit');
+sConfig := 'MQTT_HOST=broker$NMQTT_PORT=1883$NMQTT_CLIENT_ID=unit$NMQTT_TLS=false$NMQTT_CA_FILE=';
+nLength := INT_TO_UDINT(LEN(sConfig)); MEMSET(ADR(aData), 0, SIZEOF(aData)); MEMCPY(ADR(aData), ADR(sConfig), nLength);
+aData[2] := 0;
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := nLength, bSecrets := FALSE), Message := 'Embedded NUL rejected');
+
+fbParser.Reset();
+MEMSET(ADR(aData), 10, SIZEOF(aData));
+MEMCPY(ADR(aData), ADR(sConfig), INT_TO_UDINT(LEN(sConfig)));
+AssertTrue(Condition := fbParser.Parse(aData := aData, nLength := 2048, bSecrets := FALSE), Message := 'Exactly 2048 bytes accepted');
+
+fbParser.Reset();
+AssertFalse(Condition := fbParser.Parse(aData := aData, nLength := 2049, bSecrets := FALSE), Message := '2049-byte file rejected without truncation');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

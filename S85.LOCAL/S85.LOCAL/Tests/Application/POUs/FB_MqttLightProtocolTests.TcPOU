@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttLightProtocolTests" Id="{44ded023-4b1f-4a60-8308-165ac7fa0646}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightProtocolTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[FifoCapacityOrderOverflow();
+ResetAndReconnectDoNotReplay();
+RejectMalformedAndUnknownMessages();
+BuildTopicsAndAcceptDuplicateSets();
+SnapshotAndRetryUseCurrentState();
+FifoWraparoundPreservesRoutesAndTargets();
+OversizedInventoryIsRejectedSafely();]]></ST></Implementation>
+    <Method Name="FifoCapacityOrderOverflow" Id="{79d4acd2-a872-4f85-889d-3e8c608aa069}">
+      <Declaration><![CDATA[METHOD PRIVATE FifoCapacityOrderOverflow
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+    i : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('FIFO accepts sixteen commands in order and rejects newest on overflow');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+fbProtocol.SetConnection(bNewReady := TRUE);
+FOR i := 1 TO 16 DO
+    IF fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights) THEN
+        AssertTrue(Condition := TRUE, Message := 'FIFO accepts command within capacity');
+    ELSE
+        AssertTrue(Condition := FALSE, Message := 'FIFO rejected command before capacity');
+    END_IF
+END_FOR
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Seventeenth newest command rejected');
+AssertTrue(Condition := fbProtocol.nCount = 16 AND fbProtocol.nRejectedQueue = 1, Message := 'FIFO count and overflow diagnostic are correct');
+FOR i := 1 TO 16 DO
+    stCommand := fbProtocol.Pop();
+    AssertTrue(Condition := stCommand.bValid AND stCommand.bTargetOn, Message := 'FIFO preserves command order and target');
+END_FOR
+stCommand := fbProtocol.Pop();
+AssertFalse(Condition := stCommand.bValid, Message := 'Empty FIFO returns invalid command');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ResetAndReconnectDoNotReplay" Id="{9acb782d-07ea-4d7a-a512-0e2e4c457cbd}">
+      <Declaration><![CDATA[METHOD PRIVATE ResetAndReconnectDoNotReplay
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Disconnect and reset clear queued commands without replay');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+fbProtocol.SetConnection(bNewReady := TRUE);
+fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights);
+fbProtocol.SetConnection(bNewReady := FALSE);
+stCommand := fbProtocol.Pop();
+AssertFalse(Condition := stCommand.bValid OR (fbProtocol.nCount <> 0), Message := 'Disconnected protocol returns no old command');
+fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights);
+AssertTrue(Condition := fbProtocol.nCount = 0, Message := 'Disconnected protocol cannot enqueue');
+fbProtocol.SetConnection(bNewReady := TRUE);
+stCommand := fbProtocol.Pop();
+AssertFalse(Condition := stCommand.bValid, Message := 'Reconnect does not replay queued command');
+fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights);
+fbProtocol.Reset();
+stCommand := fbProtocol.Pop();
+AssertFalse(Condition := stCommand.bValid OR (fbProtocol.nCount <> 0), Message := 'Reset clears FIFO');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectMalformedAndUnknownMessages" Id="{fc677565-90a2-46f4-a304-56f82fbd6d1c}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectMalformedAndUnknownMessages
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Unknown topics and malformed payloads including TOGGLE and truncation are rejected');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+fbProtocol.SetConnection(bNewReady := TRUE);
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/unknown/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Unknown light topic rejected');
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'TOGGLE', nPayloadSize := 6, aLights := aLights), Message := 'TOGGLE rejected');
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 1, aLights := aLights), Message := 'Truncated payload rejected');
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ONX', nPayloadSize := 3, aLights := aLights), Message := 'Invalid payload rejected');
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON$00', nPayloadSize := 3, aLights := aLights), Message := 'Embedded NUL payload rejected by size check');
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set/extra', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Non-exact topic rejected');
+AssertTrue(Condition := fbProtocol.nCount = 0 AND fbProtocol.nRejectedInput = 6, Message := 'Rejected messages do not enter FIFO and diagnostics increment');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildTopicsAndAcceptDuplicateSets" Id="{c25bb82e-d51a-43ef-b88c-225e3034cb26}">
+      <Declaration><![CDATA[METHOD PRIVATE BuildTopicsAndAcceptDuplicateSets
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Topics use all three semantic IDs and duplicate absolute SET messages are accepted');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main';
+aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary';
+fbProtocol.SetConnection(bNewReady := TRUE);
+AssertTrue(Condition := fbProtocol.BuildTopic(sLocationId := aLights[1].sLocationId, sLightId := aLights[1].sId, sSuffix := 'set') = 's85/locations/H.01-09/lights/main/set', Message := 'Workshop topic built from inventory');
+AssertTrue(Condition := fbProtocol.BuildTopic(sLocationId := aLights[2].sLocationId, sLightId := aLights[2].sId, sSuffix := 'set') = 's85/locations/H.01-01/lights/main/set', Message := 'Entryway topic built from inventory');
+AssertTrue(Condition := fbProtocol.BuildTopic(sLocationId := aLights[3].sLocationId, sLightId := aLights[3].sId, sSuffix := 'set') = 's85/locations/H.01-01/lights/temporary/set', Message := 'Temporary topic built from inventory');
+AssertTrue(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'First absolute SET accepted');
+AssertTrue(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Duplicate absolute SET accepted');
+AssertTrue(Condition := fbProtocol.nCount = 2, Message := 'Duplicate SET remains FIFO events without toggle semantics');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="SnapshotAndRetryUseCurrentState" Id="{f01ca181-385b-4bd7-997d-06788d51ab8d}">
+      <Declaration><![CDATA[METHOD PRIVATE SnapshotAndRetryUseCurrentState
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+    nPublished : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Reconnect snapshots all lights and failed state publication replans current state');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main'; aLights[1].bOn := FALSE;
+aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main'; aLights[2].bOn := TRUE;
+aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary'; aLights[3].bOn := FALSE;
+fbProtocol.SetConnection(bNewReady := TRUE);
+nPublished := 0;
+WHILE nPublished < 3 DO
+    fbProtocol.PlanState(aLights := aLights);
+    AssertTrue(Condition := fbProtocol.bPublishPending, Message := 'Reconnect snapshot has next light');
+    AssertTrue(Condition := fbProtocol.sStateTopic = fbProtocol.BuildTopic(sLocationId := aLights[fbProtocol.nStateIndex].sLocationId, sLightId := aLights[fbProtocol.nStateIndex].sId, sSuffix := 'state'), Message := 'State topic matches inventory');
+    fbProtocol.ConfirmPublish(bAccepted := TRUE);
+    nPublished := nPublished + 1;
+END_WHILE
+fbProtocol.PlanState(aLights := aLights);
+AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'All three current states have been acknowledged');
+
+aLights[1].bOn := TRUE;
+fbProtocol.PlanState(aLights := aLights);
+AssertTrue(Condition := fbProtocol.bPublishPending AND (fbProtocol.sStatePayload = 'ON'), Message := 'Changed state plans ON');
+fbProtocol.ConfirmPublish(bAccepted := FALSE);
+aLights[1].bOn := FALSE;
+fbProtocol.PlanState(aLights := aLights);
+AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'Reverting to acknowledged current state needs no publish');
+fbProtocol.SetConnection(bNewReady := FALSE);
+fbProtocol.SetConnection(bNewReady := TRUE);
+fbProtocol.PlanState(aLights := aLights);
+AssertTrue(Condition := fbProtocol.bPublishPending, Message := 'Reconnect schedules a fresh complete snapshot');
+AssertTrue(Condition := fbProtocol.sStatePayload = 'OFF', Message := 'Snapshot begins with current OFF state');
+fbProtocol.ConfirmPublish(bAccepted := FALSE);
+aLights[1].bOn := TRUE;
+fbProtocol.PlanState(aLights := aLights);
+AssertTrue(Condition := fbProtocol.bPublishPending AND (fbProtocol.sStatePayload = 'ON'), Message := 'Failed snapshot publication replans the newest actual ON state');
+fbProtocol.ConfirmPublish(bAccepted := TRUE);
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="FifoWraparoundPreservesRoutesAndTargets" Id="{de0ebd23-e04e-4852-a29c-22f9d552d16a}">
+      <Declaration><![CDATA[METHOD PRIVATE FifoWraparoundPreservesRoutesAndTargets
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aExpected : ARRAY[1..21] OF ST_LightCommand;
+    stCommand : ST_LightCommand;
+    i : INT;
+    nSequence : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('FIFO preserves alternating routes and targets through overflow and ring wraparound');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main';
+aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary';
+fbProtocol.SetConnection(bNewReady := TRUE);
+FOR i := 1 TO 16 DO
+    nSequence := i;
+    aExpected[i].bTargetOn := (nSequence MOD 2) = 1;
+    CASE (nSequence MOD 3) OF
+        1: aExpected[i].sLocationId := 'H.01-09'; aExpected[i].sLightId := 'main';
+        2: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'main';
+        0: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'temporary';
+    END_CASE
+    IF aExpected[i].bTargetOn THEN
+        AssertTrue(Condition := fbProtocol.Receive(sTopic := fbProtocol.BuildTopic(sLocationId := aExpected[i].sLocationId, sLightId := aExpected[i].sLightId, sSuffix := 'set'), sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'FIFO accepts ON command');
+    ELSE
+        AssertTrue(Condition := fbProtocol.Receive(sTopic := fbProtocol.BuildTopic(sLocationId := aExpected[i].sLocationId, sLightId := aExpected[i].sLightId, sSuffix := 'set'), sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'FIFO accepts OFF command');
+    END_IF
+END_FOR
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Full FIFO rejects newest command');
+FOR i := 1 TO 5 DO
+    stCommand := fbProtocol.Pop();
+    AssertTrue(Condition := stCommand.bValid AND (stCommand.sLocationId = aExpected[i].sLocationId) AND (stCommand.sLightId = aExpected[i].sLightId) AND (stCommand.bTargetOn = aExpected[i].bTargetOn), Message := 'Initial FIFO commands preserve exact order');
+END_FOR
+FOR i := 17 TO 21 DO
+    nSequence := i;
+    aExpected[i].bTargetOn := (nSequence MOD 2) = 1;
+    CASE (nSequence MOD 3) OF
+        1: aExpected[i].sLocationId := 'H.01-09'; aExpected[i].sLightId := 'main';
+        2: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'main';
+        0: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'temporary';
+    END_CASE
+    IF aExpected[i].bTargetOn THEN
+        AssertTrue(Condition := fbProtocol.Receive(sTopic := fbProtocol.BuildTopic(sLocationId := aExpected[i].sLocationId, sLightId := aExpected[i].sLightId, sSuffix := 'set'), sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Wrapped FIFO accepts ON command');
+    ELSE
+        AssertTrue(Condition := fbProtocol.Receive(sTopic := fbProtocol.BuildTopic(sLocationId := aExpected[i].sLocationId, sLightId := aExpected[i].sLightId, sSuffix := 'set'), sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Wrapped FIFO accepts OFF command');
+    END_IF
+END_FOR
+FOR i := 6 TO 21 DO
+    stCommand := fbProtocol.Pop();
+    AssertTrue(Condition := stCommand.bValid AND (stCommand.sLocationId = aExpected[i].sLocationId) AND (stCommand.sLightId = aExpected[i].sLightId) AND (stCommand.bTargetOn = aExpected[i].bTargetOn), Message := 'Wrapped FIFO preserves exact route and target sequence');
+END_FOR
+AssertTrue(Condition := fbProtocol.nCount = 0, Message := 'Wrapped FIFO drains empty');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="OversizedInventoryIsRejectedSafely" Id="{af08bc2b-3e40-43ee-8134-ea9c14a2b88d}">
+      <Declaration><![CDATA[METHOD PRIVATE OversizedInventoryIsRejectedSafely
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..17] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Inventories above protocol capacity reject commands and state planning safely');
+aLights[1].sLocationId := 'H.01-09';
+aLights[1].sId := 'main';
+fbProtocol.SetConnection(bNewReady := TRUE);
+AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Oversized inventory command rejected');
+AssertTrue(Condition := fbProtocol.nCount = 0, Message := 'Oversized inventory does not enqueue command');
+fbProtocol.PlanState(aLights := aLights);
+AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'Oversized inventory produces no unsafe state index');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

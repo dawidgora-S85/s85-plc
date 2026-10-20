@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_MqttConfig" Id="{b9edf582-d671-4b68-ac43-f8bc47b24e9a}">
+    <Declaration><![CDATA[TYPE ST_MqttConfig :
+STRUCT
+    sHostName : STRING(255);
+    nHostPort : UINT;
+    sClientId : STRING(64);
+    sUserName : STRING(128);
+    sUserPassword : STRING(128);
+    bUseTls : BOOL;
+    sCAFile : STRING(255);
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

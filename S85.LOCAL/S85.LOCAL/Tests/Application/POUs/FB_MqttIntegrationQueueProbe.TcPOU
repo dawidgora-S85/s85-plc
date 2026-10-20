@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttIntegrationQueueProbe" Id="{dff8de19-a022-41af-9e1d-fc1f561c42ac}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueProbe EXTENDS S85Core.FB_MqttIntegration]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="ResetQueueForTest" Id="{4b4477f1-537c-4a85-9a82-38370ae9eb70}">
+      <Declaration><![CDATA[METHOD PUBLIC ResetQueueForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[ResetQueueForTest := ResetMessageQueue();]]></ST></Implementation>
+    </Method>
+    <Method Name="ValidateCopiedMessageForTest" Id="{c10cf147-5bdc-48de-8348-c74ea16522cf}">
+      <Declaration><![CDATA[METHOD PUBLIC ValidateCopiedMessageForTest : BOOL
+VAR_INPUT
+    bTopicReceived : BOOL;
+    nTopicSize : UDINT;
+    bPayloadReceived : BOOL;
+    nPayloadSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    sTopic : STRING(255);
+    sPayload : STRING(3);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ValidateCopiedMessageForTest := ValidateCopiedMessage(
+    bTopicReceived := bTopicReceived,
+    nTopicSize := nTopicSize,
+    sTopic := sTopic,
+    bPayloadReceived := bPayloadReceived,
+    nPayloadSize := nPayloadSize,
+    sPayload := sPayload
+);]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

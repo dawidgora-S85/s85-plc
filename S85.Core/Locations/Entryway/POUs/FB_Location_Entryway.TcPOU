@@ -4,6 +4,7 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Entryway
 VAR_INPUT
     stInputs : ST_EntrywayInputs;
+    stCommand : ST_LightCommand;
 END_VAR
 
 VAR_OUTPUT
@@ -24,11 +25,15 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbMainLight(
     bButton := stInputs.bButton,
+    bSetValid := stCommand.bValid AND (stCommand.sLocationId = cLocationId) AND (stCommand.sLightId = cMainLightId),
+    bTargetOn := stCommand.bTargetOn,
     bLightRelay => stOutputs.bLightRelay
 );
 
 fbUpperLight(
     bButton := stInputs.bUpperButton,
+    bSetValid := stCommand.bValid AND (stCommand.sLocationId = cLocationId) AND (stCommand.sLightId = cTemporaryLightId),
+    bTargetOn := stCommand.bTargetOn,
     bLightRelay => stOutputs.bTemporaryLightRelay
 );
 

@@ -37,6 +37,24 @@
     <Compile Include="Application\DUTs\ST_LightInfo.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Application\DUTs\ST_LightCommand.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttLightProtocol.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttIntegration.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttConfigLoader.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttConfigParser.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\DUTs\ST_MqttConfig.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Locations\Workshop\POUs\FB_Location_Workshop.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -66,6 +84,11 @@
     <Folder Include="Application" />
     <Folder Include="Application\POUs" />
     <Folder Include="Application\DUTs" />
+    <Folder Include="Infrastructure" />
+    <Folder Include="Infrastructure\Integrations" />
+    <Folder Include="Infrastructure\Integrations\MQTT" />
+    <Folder Include="Infrastructure\Integrations\MQTT\POUs" />
+    <Folder Include="Infrastructure\Integrations\MQTT\DUTs" />
     <Folder Include="Locations" />
     <Folder Include="Locations\Workshop" />
     <Folder Include="Locations\Workshop\POUs" />
@@ -83,6 +106,14 @@
     <PlaceholderReference Include="Tc2_Standard">
       <DefaultResolution>Tc2_Standard, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_Standard</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_System">
+      <DefaultResolution>Tc2_System, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_System</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc3_IotBase">
+      <DefaultResolution>Tc3_IotBase, 3.6.7.0 (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc3_IotBase</Namespace>
     </PlaceholderReference>
   </ItemGroup>
   <ItemGroup>

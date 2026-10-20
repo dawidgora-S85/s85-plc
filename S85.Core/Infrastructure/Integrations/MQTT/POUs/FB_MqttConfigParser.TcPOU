@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttConfigParser" Id="{df1574c1-a40c-45a0-9711-441c860a34dc}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttConfigParser
+VAR
+    {attribute 'TcNoSymbol'}
+    stConfig : ST_MqttConfig;
+    {attribute 'TcNoSymbol'}
+    sKey : STRING(32);
+    {attribute 'TcNoSymbol'}
+    sValue : STRING(255);
+    bConfigParsed : BOOL;
+    bSecretsParsed : BOOL;
+    bSawHost : BOOL;
+    bSawPort : BOOL;
+    bSawClientId : BOOL;
+    bSawTls : BOOL;
+    bSawCA : BOOL;
+    bSawUserName : BOOL;
+    bSawPassword : BOOL;
+    nPortValue : UDINT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="Parse" Id="{7cf97b10-9118-4d2b-acb9-0a02cf97bd68}">
+      <Declaration><![CDATA[METHOD PUBLIC Parse : BOOL
+VAR_IN_OUT
+    aData : ARRAY[*] OF BYTE;
+END_VAR
+VAR_INPUT
+    nLength : UDINT;
+    bSecrets : BOOL;
+END_VAR
+VAR
+    i : UDINT;
+    j : UDINT;
+    nLineStart : UDINT;
+    nLineEnd : UDINT;
+    nEqualAt : UDINT;
+    nKeyBytes : UDINT;
+    nValueBytes : UDINT;
+    bHasEqual : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[Parse := FALSE;
+IF (nLength = 0) OR (nLength > 2048) THEN RETURN; END_IF
+IF (LOWER_BOUND(aData, 1) <> 0) OR (UPPER_BOUND(aData, 1) < UDINT_TO_DINT(nLength)) THEN RETURN; END_IF
+IF bSecrets THEN
+    IF NOT bConfigParsed OR bSecretsParsed THEN RETURN; END_IF
+    bSawUserName := FALSE;
+    bSawPassword := FALSE;
+ELSE
+    IF bConfigParsed OR bSecretsParsed THEN RETURN; END_IF
+    MEMSET(ADR(stConfig), 0, SIZEOF(stConfig));
+    bSawHost := FALSE; bSawPort := FALSE; bSawClientId := FALSE; bSawTls := FALSE; bSawCA := FALSE;
+END_IF
+
+FOR i := 0 TO nLength - 1 DO
+    IF aData[i] = 0 THEN RETURN; END_IF
+END_FOR
+nLineStart := 0;
+FOR i := 0 TO nLength DO
+    IF (i = nLength) OR (aData[i] = 10) THEN
+        nLineEnd := i;
+        IF nLineEnd > nLineStart THEN
+            IF aData[nLineEnd - 1] = 13 THEN nLineEnd := nLineEnd - 1; END_IF
+        END_IF
+        IF nLineEnd > nLineStart THEN
+            nEqualAt := nLineEnd;
+            bHasEqual := FALSE;
+            FOR j := nLineStart TO nLineEnd - 1 DO
+                IF aData[j] = 61 THEN
+                    IF NOT bHasEqual THEN bHasEqual := TRUE; nEqualAt := j; END_IF
+                END_IF
+            END_FOR
+            IF NOT bHasEqual THEN RETURN; END_IF
+            nKeyBytes := nEqualAt - nLineStart;
+            nValueBytes := nLineEnd - nEqualAt - 1;
+            IF (nKeyBytes = 0) OR (nKeyBytes > 32) OR (nValueBytes > 255) THEN RETURN; END_IF
+            FOR j := nEqualAt + 1 TO nLineEnd - 1 DO
+                IF (aData[j] < 32) OR (aData[j] > 126) THEN RETURN; END_IF
+            END_FOR
+            MEMSET(ADR(sKey), 0, SIZEOF(sKey));
+            MEMSET(ADR(sValue), 0, SIZEOF(sValue));
+            MEMCPY(ADR(sKey), ADR(aData[nLineStart]), nKeyBytes);
+            IF nValueBytes > 0 THEN MEMCPY(ADR(sValue), ADR(aData[nEqualAt + 1]), nValueBytes); END_IF
+            IF NOT bSecrets THEN
+                IF sKey = 'MQTT_HOST' THEN
+                    IF bSawHost OR (nValueBytes = 0) THEN RETURN; END_IF
+                    stConfig.sHostName := sValue; bSawHost := TRUE;
+                ELSIF sKey = 'MQTT_PORT' THEN
+                    IF bSawPort OR (nValueBytes = 0) THEN RETURN; END_IF
+                    nPortValue := 0;
+                    FOR j := nEqualAt + 1 TO nLineEnd - 1 DO
+                        IF (aData[j] < 48) OR (aData[j] > 57) THEN RETURN; END_IF
+                        nPortValue := nPortValue * 10 + (aData[j] - 48);
+                        IF nPortValue > 65535 THEN RETURN; END_IF
+                    END_FOR
+                    IF nPortValue = 0 THEN RETURN; END_IF
+                    stConfig.nHostPort := UDINT_TO_UINT(nPortValue); bSawPort := TRUE;
+                ELSIF sKey = 'MQTT_CLIENT_ID' THEN
+                    IF bSawClientId OR (nValueBytes = 0) OR (nValueBytes > 64) THEN RETURN; END_IF
+                    stConfig.sClientId := sValue; bSawClientId := TRUE;
+                ELSIF sKey = 'MQTT_TLS' THEN
+                    IF bSawTls THEN RETURN; END_IF
+                    IF sValue = 'true' THEN stConfig.bUseTls := TRUE;
+                    ELSIF sValue = 'false' THEN stConfig.bUseTls := FALSE;
+                    ELSE RETURN; END_IF
+                    bSawTls := TRUE;
+                ELSIF sKey = 'MQTT_CA_FILE' THEN
+                    IF bSawCA OR (nValueBytes > 255) THEN RETURN; END_IF
+                    stConfig.sCAFile := sValue; bSawCA := TRUE;
+                ELSE
+                    RETURN;
+                END_IF
+            ELSE
+                IF sKey = 'MQTT_USERNAME' THEN
+                    IF bSawUserName OR (nValueBytes = 0) OR (nValueBytes > 128) THEN RETURN; END_IF
+                    stConfig.sUserName := sValue; bSawUserName := TRUE;
+                ELSIF sKey = 'MQTT_PASSWORD' THEN
+                    IF bSawPassword OR (nValueBytes = 0) OR (nValueBytes > 128) THEN RETURN; END_IF
+                    stConfig.sUserPassword := sValue; bSawPassword := TRUE;
+                ELSE
+                    RETURN;
+                END_IF
+            END_IF
+        END_IF
+        nLineStart := i + 1;
+    END_IF
+END_FOR
+
+IF NOT bSecrets THEN
+    IF NOT (bSawHost AND bSawPort AND bSawClientId AND bSawTls AND bSawCA) THEN RETURN; END_IF
+    IF stConfig.bUseTls AND (stConfig.sCAFile = '') THEN RETURN; END_IF
+    bConfigParsed := TRUE;
+ELSE
+    IF NOT (bSawUserName AND bSawPassword) THEN RETURN; END_IF
+    bSecretsParsed := TRUE;
+END_IF
+MEMSET(ADR(sKey), 0, SIZEOF(sKey));
+MEMSET(ADR(sValue), 0, SIZEOF(sValue));
+Parse := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="GetConfig" Id="{42532f38-87be-4b12-9e95-ac626c22e978}">
+      <Declaration><![CDATA[METHOD PUBLIC GetConfig : BOOL
+VAR_IN_OUT
+    {attribute 'TcNoSymbol'}
+    stResult : ST_MqttConfig;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[GetConfig := bConfigParsed AND bSecretsParsed;
+IF GetConfig THEN
+    stResult := stConfig;
+ELSE
+    MEMSET(ADR(stResult), 0, SIZEOF(stResult));
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="Reset" Id="{7b3d1932-8c4a-425f-b067-25aeb5a79f23}">
+      <Declaration><![CDATA[METHOD PUBLIC Reset]]></Declaration>
+      <Implementation><ST><![CDATA[MEMSET(ADR(stConfig), 0, SIZEOF(stConfig));
+MEMSET(ADR(sKey), 0, SIZEOF(sKey));
+MEMSET(ADR(sValue), 0, SIZEOF(sValue));
+bConfigParsed := FALSE;
+bSecretsParsed := FALSE;]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

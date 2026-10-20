@@ -75,13 +75,15 @@ LOCAL `MAIN` reads these simulation inputs and writes these simulation outputs:
 - `GVL_EntrywaySimulation.bTemporaryLightRelay`
 
 `PlcTask` calls `MAIN` and `PRG_Tests`; `PRG_Tests` calls `TcUnit.RUN()`.
-The test suites are `fbButtonTests`, `fbLightTests`, `fbWorkshopTests`, `fbHomeTests` and `fbLocalIntegrationTests`.
+The test suites are `fbButtonTests`, `fbLightTests`, `fbWorkshopTests`, `fbHomeTests`, `fbLightCatalogTests`, `fbLocalIntegrationTests`, `fbLightCommandTests`, `fbMqttLightProtocolTests` and `fbMqttConfigParserTests`.
 Run them only in the authorized LOCAL PLC session.
+The current source defines 31 tests in nine suites: Button 5, Light 4, Workshop 1, Home 1, LightCatalog 1, LocalIntegration 3, LightCommand 5, MqttLightProtocol 7 and MqttConfigParser 4. These are source counts, not execution results.
+See [MQTT light integration](mqtt-light.md) for broker configuration, topics and commissioning checks.
 
 A Watch List is not required to check the results.
 After separate authorization for LOCAL online reads, use the XAE PLC Symbol Browser or an approved ADS symbol reader.
 Expand `PRG_Tests`, then each suite instance and its `Tests` array.
-Confirm the expected test counts: Button 5, Light 4, Workshop 1, Home 1 and LocalIntegration 3.
+Confirm the expected test counts: Button 5, Light 4, Workshop 1, Home 1, LightCatalog 1, LocalIntegration 3, LightCommand 5, MqttLightProtocol 7 and MqttConfigParser 4.
 Zero or missing tests are not a pass.
 Read `NumberOfTests` and inspect indices `1` through that count.
 Each active test must have `TestIsFinished=TRUE`, `TestIsFailed=FALSE` and `TestIsSkipped=FALSE`.

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttIntegrationQueueTests" Id="{2729f28e-1d87-48d7-9e91-895c992b69c1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[EmptyQueueResetCanBeRepeated();
+ProductionQueueResetHelperCanBeRepeated();
+CopiedTransportBuffersAreValidatedBoundedly();]]></ST></Implementation>
+    <Method Name="EmptyQueueResetCanBeRepeated" Id="{18d680fc-594f-4897-a31d-43221962500c}">
+      <Declaration><![CDATA[METHOD PRIVATE EmptyQueueResetCanBeRepeated
+VAR
+    fbMessageQueue : FB_IotMqtt5MessageQueue;
+    bResetResult : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Empty MQTT message queue can be reset repeatedly even when ResetQueue returns FALSE');
+AssertTrue(Condition := fbMessageQueue.nQueuedMessages = 0, Message := 'Fresh queue starts empty');
+bResetResult := fbMessageQueue.ResetQueue();
+AssertFalse(Condition := bResetResult, Message := 'ResetQueue returns FALSE for an already empty queue');
+AssertTrue(Condition := fbMessageQueue.nQueuedMessages = 0, Message := 'Queue remains empty after first reset');
+bResetResult := fbMessageQueue.ResetQueue();
+AssertFalse(Condition := bResetResult, Message := 'Repeated empty queue reset returns FALSE');
+AssertTrue(Condition := fbMessageQueue.nQueuedMessages = 0, Message := 'Queue remains empty after repeated reset');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ProductionQueueResetHelperCanBeRepeated" Id="{39d46cb4-cae3-433a-9a75-6f6a34b3479a}">
+      <Declaration><![CDATA[METHOD PRIVATE ProductionQueueResetHelperCanBeRepeated
+VAR
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Production MQTT queue reset helper completes repeatedly for an empty queue');
+AssertTrue(Condition := fbProbe.ResetQueueForTest(), Message := 'Production helper accepts empty queue after reset');
+AssertTrue(Condition := fbProbe.ResetQueueForTest(), Message := 'Production helper accepts repeated empty queue reset');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="CopiedTransportBuffersAreValidatedBoundedly" Id="{6f63e024-3771-4bc8-9cdc-6a2d7e76dc79}">
+      <Declaration><![CDATA[METHOD PRIVATE CopiedTransportBuffersAreValidatedBoundedly
+VAR
+    fbProbe : FB_MqttIntegrationQueueProbe;
+    sTopic : STRING(255);
+    sPayload : STRING(3);
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Copied MQTT transport buffers require bounded valid topic and payload bytes');
+sPayload := 'ON';
+sTopic := 's85/locations/H.01-09/lights/main/set';
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 37, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Confirmed production topic with ON accepted');
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 38, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Observed 38-byte topic with ON accepted');
+sPayload := 'OFF';
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 37, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Confirmed production topic with OFF accepted');
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 38, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Confirmed production topic including NUL with OFF accepted');
+sTopic := 's85/topic';
+sPayload := 'ON';
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Topic size excluding NUL and ON accepted');
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 10, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Topic size including final NUL accepted');
+sPayload := 'OFF';
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'OFF payload accepted');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := FALSE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Failed topic getter rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := FALSE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Failed payload getter rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 0, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Empty topic rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 256, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Oversized topic rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 8, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Mismatched topic size rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 11, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Topic mismatch greater than one rejected');
+sTopic := '';
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 1, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Zero-length raw topic rejected');
+sTopic := 's85/topic';
+sPayload := 'ON';
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 1, sTopic := sTopic, sPayload := sPayload), Message := 'Truncated payload rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'ON reported with included NUL rejected');
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 4, sTopic := sTopic, sPayload := sPayload), Message := 'Payload beyond buffer rejected');
+sPayload := 'OFF';
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'OFF reported shorter than content rejected');
+sPayload := 'ON';
+sPayload[1] := 0;
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Embedded NUL payload rejected');
+sPayload := 'ON';
+sTopic[2] := 0;
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Embedded NUL topic rejected');
+FOR i := 0 TO SIZEOF(sTopic) - 1 DO
+    sTopic[i] := 65;
+END_FOR
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 255, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Unterminated full topic buffer rejected');
+FOR i := 0 TO SIZEOF(sTopic) - 1 DO
+    sTopic[i] := 65;
+END_FOR
+sTopic[254] := 0;
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 254, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := '254-byte topic followed by NUL accepted');
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 255, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := '254-byte topic size including NUL accepted');
+FOR i := 0 TO SIZEOF(sTopic) - 1 DO
+    sTopic[i] := 65;
+END_FOR
+sTopic[255] := 0;
+AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 255, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := '255-character topic at buffer boundary accepted');
+FOR i := 0 TO SIZEOF(sPayload) - 1 DO
+    sPayload[i] := 65;
+END_FOR
+sTopic := 's85/topic';
+AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Unterminated full payload buffer rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
