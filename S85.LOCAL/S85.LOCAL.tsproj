@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <TcSmProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2012/07/TcSmProject" TcSmVersion="1.0" TcVersion="3.1.4026.27">
-	<Project ProjectGUID="{36534E61-F1EA-4D8B-9729-50C73BE3CD37}" TargetNetId="199.4.42.250.1.1" Target64Bit="true" ShowHideConfigurations="#x3c7">
+	<Project ProjectGUID="{36534E61-F1EA-4D8B-9729-50C73BE3CD37}" TargetNetId="5.180.201.239.1.1" Target64Bit="true" ShowHideConfigurations="#x3c7">
 		<System>
 			<Tasks>
 				<Task Id="3" Priority="20" CycleTime="100000" AmsPort="350" AdtTasks="true">
@@ -9,8 +9,8 @@
 			</Tasks>
 		</System>
 		<Plc>
-			<Project GUID="{4DD37535-526B-4D40-A398-542FE49BBBB3}" Name="S85_LOCAL" PrjFilePath="S85.LOCAL\S85_LOCAL.plcproj" TmcFilePath="S85.LOCAL\S85_LOCAL.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{EC0C0BA4-D351-F348-AEC7-711C314A1AF2}" TmcPath="S85.LOCAL\S85_LOCAL.tmc">
+			<Project Disabled="true" GUID="{4DD37535-526B-4D40-A398-542FE49BBBB3}" Name="S85_LOCAL" PrjFilePath="S85.LOCAL\S85_LOCAL.plcproj" TmcFilePath="S85.LOCAL\S85_LOCAL.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{BE94F412-DD7E-2F77-E928-C438D92EAA64}" TmcPath="S85.LOCAL\S85_LOCAL.tmc">
 					<Name>S85_LOCAL Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Contexts>
