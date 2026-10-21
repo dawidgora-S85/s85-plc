@@ -13,8 +13,8 @@
 - The production system uses `S85.PROD/S85/S85_PROD.plcproj`, PLC application `S85_PROD`, instance `S85_PROD Instance` and TMC `S85.PROD/S85/S85_PROD.tmc`.
 - `S85.LOCAL/S85.LOCAL.tsproj` owns the local system. It uses `S85.LOCAL/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
 - `S85.Core/S85.Core.tspproj` wraps the shared PLC library in `S85.Core/S85_Core.plcproj`.
-- Core owns shared, environment-independent home logic and contracts. `Application` contains the home application and its DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs. `Domains/Lighting` and `Shared` remain unchanged.
-- `FB_Workshop` remains in `Locations/Workshop/POUs` as behavior separate from the `FB_Location_Workshop` contract adapter.
+- Core owns shared, environment-independent home logic and contracts. `Application` contains the home application and its DUTs and POUs. `Locations/Workshop`, `Locations/Entryway` and `Locations/Hall` contain their location adapters. `Domains/Lighting` owns neutral shared light behavior.
+- `FB_ButtonLight` in `Domains/Lighting/POUs` provides shared button-toggle and light-command behavior; location adapters compose it for their circuits.
 - Both applications reference Core through Library Manager. PROD adapters connect hardware; LOCAL adapters connect simulation.
 - LOCAL uses x64 and keeps simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.
 - PROD uses ARMv8 and keeps physical Beckhoff I/O under `Infrastructure/IO/Beckhoff/{POUs,GVLs}`. It contains no simulation or TcUnit tests.

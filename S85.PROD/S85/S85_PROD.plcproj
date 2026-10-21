@@ -33,6 +33,9 @@
     <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_EntrywayIO.TcGVL">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Infrastructure\IO\Beckhoff\GVLs\GVL_HallIO.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>

@@ -22,7 +22,7 @@
     <VirtualLibrary>true</VirtualLibrary>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Locations\Workshop\POUs\FB_Workshop.TcPOU">
+    <Compile Include="Domains\Lighting\POUs\FB_ButtonLight.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Application\POUs\FB_Home.TcPOU">
@@ -73,6 +73,15 @@
     <Compile Include="Locations\Entryway\DUTs\ST_EntrywayOutputs.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Locations\Hall\DUTs\ST_HallInputs.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Locations\Hall\DUTs\ST_HallOutputs.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Locations\Hall\POUs\FB_Location_Hall.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Domains\Lighting\POUs\FB_Light.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -90,12 +99,15 @@
     <Folder Include="Infrastructure\Integrations\MQTT\POUs" />
     <Folder Include="Infrastructure\Integrations\MQTT\DUTs" />
     <Folder Include="Locations" />
+    <Folder Include="Locations\Hall\POUs" />
     <Folder Include="Locations\Workshop" />
     <Folder Include="Locations\Workshop\POUs" />
     <Folder Include="Locations\Workshop\DUTs" />
     <Folder Include="Locations\Entryway" />
     <Folder Include="Locations\Entryway\POUs" />
     <Folder Include="Locations\Entryway\DUTs" />
+    <Folder Include="Locations\Hall" />
+    <Folder Include="Locations\Hall\DUTs" />
     <Folder Include="Domains" />
     <Folder Include="Domains\Lighting" />
     <Folder Include="Domains\Lighting\POUs" />

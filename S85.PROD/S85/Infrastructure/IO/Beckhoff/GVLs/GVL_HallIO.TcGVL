@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_HallIO" Id="{7ba4e0f5-2971-47d5-a58a-b437d57a7d77}">
+    <Declaration><![CDATA[VAR_GLOBAL
+    bUpperButton AT %I* : BOOL;
+    bLowerButton AT %I* : BOOL;
+    bOuterSpotsRelay AT %Q* : BOOL;
+    bMiddleSpotRelay AT %Q* : BOOL;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

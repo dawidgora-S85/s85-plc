@@ -1,11 +1,12 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_HomeTests" Id="{B99FA3B8-B42B-41D5-B9C7-42424777EAD9}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_HomeTests EXTENDS TcUnit.FB_TestSuite
 VAR
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[WorkshopEntrywayAndUpperButtonAreIndependent();]]></ST>
+      <ST><![CDATA[WorkshopEntrywayAndUpperButtonAreIndependent();
+HallButtonsAndSpotsAreIndependent();]]></ST>
     </Implementation>
     <Method Name="WorkshopEntrywayAndUpperButtonAreIndependent" Id="{FACD67E4-5B72-4A4A-8160-526921190802}">
       <Declaration><![CDATA[METHOD PRIVATE WorkshopEntrywayAndUpperButtonAreIndependent
@@ -18,7 +19,7 @@ END_VAR]]></Declaration>
         <ST><![CDATA[TEST('Home circuits ignore startup-high, hold, release, and toggle independently');
 
 stInputs.Workshop.bButton := TRUE;
-stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bLowerButton := TRUE;
 stInputs.Entryway.bUpperButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertFalse(Condition := stOutputs.Workshop.bLightRelay, Message := 'Workshop ignores a startup-high input');
@@ -26,7 +27,7 @@ AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway ig
 AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Upper button ignores a startup-high input');
 
 stInputs.Workshop.bButton := FALSE;
-stInputs.Entryway.bButton := FALSE;
+stInputs.Entryway.bLowerButton := FALSE;
 stInputs.Entryway.bUpperButton := FALSE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 stInputs.Workshop.bButton := TRUE;
@@ -48,22 +49,22 @@ fbHome(stInputs := stInputs, stOutputs => stOutputs);
 stInputs.Workshop.bButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 stInputs.Workshop.bButton := FALSE;
-stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bLowerButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Entryway press leaves Workshop on');
 AssertTrue(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway press turns its relay on');
 AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Entryway press leaves upper relay off');
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertTrue(Condition := stOutputs.Entryway.bLightRelay, Message := 'Holding Entryway does not toggle again');
-stInputs.Entryway.bButton := FALSE;
+stInputs.Entryway.bLowerButton := FALSE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertTrue(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway release leaves its relay on');
-stInputs.Entryway.bButton := TRUE;
+stInputs.Entryway.bLowerButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Entryway repress toggles its relay off');
 AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Entryway repress leaves Workshop on');
 
-stInputs.Entryway.bButton := FALSE;
+stInputs.Entryway.bLowerButton := FALSE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
 stInputs.Entryway.bUpperButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
@@ -80,6 +81,113 @@ fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Upper-button repress toggles its relay off');
 AssertTrue(Condition := stOutputs.Workshop.bLightRelay, Message := 'Upper-button repress leaves Workshop on');
 AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Upper-button repress leaves Entryway off');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="HallButtonsAndSpotsAreIndependent" Id="{06e4971c-8b7a-44d9-90a4-b64161041d8e}">
+      <Declaration><![CDATA[METHOD PRIVATE HallButtonsAndSpotsAreIndependent
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    bExpectedEntrywayRelay : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Hall upper and lower buttons independently toggle their assigned circuits');
+
+bExpectedEntrywayRelay := FALSE;
+stInputs.Hall.bLowerButton := TRUE;
+stInputs.Hall.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertFalse(Condition := stOutputs.Entryway.bLightRelay, Message := 'Startup-held Hall lower does not toggle Entryway main');
+AssertFalse(Condition := stOutputs.Hall.bOuterSpotsRelay OR stOutputs.Hall.bMiddleSpotRelay, Message := 'Startup-held Hall upper does not toggle spots');
+
+stInputs.Entryway.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Entryway lower toggles while Hall lower remains startup-held');
+stInputs.Entryway.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Entryway release leaves expected state unchanged');
+
+stInputs.Hall.bLowerButton := FALSE;
+stInputs.Hall.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Hall lower toggles Entryway main independently');
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay, Message := 'Hall lower leaves Entryway temporary off');
+AssertFalse(Condition := stOutputs.Hall.bOuterSpotsRelay OR stOutputs.Hall.bMiddleSpotRelay, Message := 'Hall lower does not toggle spots');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Holding Hall lower does not toggle again');
+stInputs.Hall.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Hall lower release and repress toggles once');
+
+stInputs.Entryway.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Entryway lower press while Hall lower is held toggles independently');
+stInputs.Hall.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Hall lower release and repress toggles while Entryway lower remains held');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Holding both independent buttons does not toggle again');
+stInputs.Hall.bLowerButton := FALSE;
+stInputs.Entryway.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bLowerButton := TRUE;
+stInputs.Entryway.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Same-scan Hall lower and Entryway lower presses produce one toggle');
+
+stInputs.Hall.bLowerButton := FALSE;
+stInputs.Entryway.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Entryway.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Entryway lower independently toggles shared Entryway main');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Holding Entryway lower does not toggle again');
+stInputs.Entryway.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Hall lower press toggles while Entryway lower is released');
+stInputs.Entryway.bLowerButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+bExpectedEntrywayRelay := NOT bExpectedEntrywayRelay;
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Entryway lower release and repress toggles while Hall lower remains held');
+stInputs.Entryway.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bLowerButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+stInputs.Hall.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Hall.bOuterSpotsRelay AND stOutputs.Hall.bMiddleSpotRelay, Message := 'Hall upper turns both spots on together');
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Hall spots leave Entryway main unchanged');
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay OR stOutputs.Workshop.bLightRelay, Message := 'Hall spots leave temporary and Workshop circuits off');
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Hall.bOuterSpotsRelay AND stOutputs.Hall.bMiddleSpotRelay, Message := 'Holding Hall upper does not toggle spots again');
+stInputs.Hall.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertTrue(Condition := stOutputs.Hall.bOuterSpotsRelay AND stOutputs.Hall.bMiddleSpotRelay, Message := 'Hall upper release leaves spots on');
+stInputs.Hall.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+AssertFalse(Condition := stOutputs.Hall.bOuterSpotsRelay OR stOutputs.Hall.bMiddleSpotRelay, Message := 'Hall upper repress turns both spots off together');
+AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Hall upper repress leaves Entryway main unchanged');
+AssertFalse(Condition := stOutputs.Entryway.bTemporaryLightRelay OR stOutputs.Workshop.bLightRelay, Message := 'Hall upper repress leaves unrelated circuits off');
 
 TEST_FINISHED();]]></ST>
       </Implementation>

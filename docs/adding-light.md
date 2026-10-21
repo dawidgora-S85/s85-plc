@@ -24,12 +24,12 @@ END_FOR
 
 ## Checklist Core
 
-Obecne zachowanie urządzenia jest w `S85.Core/Locations/Workshop/POUs/FB_Workshop.TcPOU`: `FB_Workshop` obsługuje przycisk i wykorzystuje generyczny `S85.Core/Domains/Lighting/POUs/FB_Light.TcPOU`. Ponownie wykorzystaj `FB_Workshop`, jeśli pasuje. Nie przenoś logiki i nie zmieniaj bez potrzeby zachowania.
+Wspólne zachowanie przełączania przyciskiem i obsługi poleceń światła znajduje się w `S85.Core/Domains/Lighting/POUs/FB_ButtonLight.TcPOU`. Wykorzystaj je w adapterze lokalizacji, a `FB_Location_Workshop` pozostaw adapterem kontraktu Workshop.
 
 Dla kolejnego światła w istniejącym Entryway, z własnym przyciskiem i wyjściem, minimum to 8 plików kodu: `S85.Core/Locations/Entryway/POUs/FB_Location_Entryway.TcPOU`, `S85.Core/Locations/Entryway/DUTs/ST_EntrywayInputs.TcDUT`, `S85.Core/Locations/Entryway/DUTs/ST_EntrywayOutputs.TcDUT`, `S85.Core/Application/POUs/FB_Home.TcPOU`, dwa adaptery symulacji LOCAL, jeden GVL symulacji oraz test katalogu LOCAL. Obsługa PROD wymaga dodatkowo dwóch adapterów sprzętowych, jednego GVL i zatwierdzonego mapowania w `S85.PROD/S85.PROD.tsproj`: łącznie 12 plików dla obu środowisk. Nowe DUT/POU wymagają też wpisów w projekcie. Nie trzeba zmieniać `ST_HomeInputs` ani `ST_HomeOutputs`, jeśli nie dodajesz nowej lokalizacji ani nie zmieniasz ich pól - zawierają już struktury Entryway.
 
 1. Dodaj wejście i wyjście w `ST_EntrywayInputs`/`ST_EntrywayOutputs` tylko gdy są potrzebne. Zachowaj logiczny kontrakt niezależny od sprzętu.
-2. W `FB_Location_Entryway` dodaj instancję `FB_Workshop` i stałą nowego id, np. `cWallWestLightId := 'wall_west'`. Wykorzystaj istniejące `cLocationId`, nie definiuj lokalizacji ponownie. Wywołaj FB z nowym wejściem `bButton` i przypisz `bLightRelay` do nowego wyjścia. Następnie opublikuj `ST_LightInfo` z tymi id i stanem wyjścia.
+2. W `FB_Location_Entryway` dodaj instancję `FB_ButtonLight` i stałą nowego id, np. `cWallWestLightId := 'wall_west'`. Wykorzystaj istniejące `cLocationId`, nie definiuj lokalizacji ponownie. Wywołaj FB z wejściem przycisku i przypisz `bLightRelay` do nowego wyjścia. Następnie opublikuj `ST_LightInfo` z tymi id i stanem wyjścia.
 3. Powiększ statyczną tablicę lokalizacji i `FB_Home.aLights`; przepisz snapshoty po wywołaniu lokalizacji. Metadane lokalizacji przechowuj w Core, nie duplikuj konfiguracji w adapterach.
 4. Dodaj testy konfiguracji katalogu: niepuste pola, unikalne pary, zachowanie stałych id po przełączeniach oraz zgodność `bOn` z logicznym wyjściem.
 

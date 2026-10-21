@@ -10,6 +10,8 @@ END_VAR]]></Declaration>
 GVL_WorkshopIO.bLightRelay := stOutputs.Workshop.bLightRelay;
 GVL_EntrywayIO.bLightRelay := stOutputs.Entryway.bLightRelay;
 GVL_EntrywayIO.bTemporaryLightRelay := stOutputs.Entryway.bTemporaryLightRelay;
+GVL_HallIO.bOuterSpotsRelay := stOutputs.Hall.bOuterSpotsRelay;
+GVL_HallIO.bMiddleSpotRelay := stOutputs.Hall.bMiddleSpotRelay;
 ]]></ST>
     </Implementation>
   </POU>

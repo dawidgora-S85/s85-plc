@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Location_Hall" Id="{7b611248-98c1-4a90-9d51-c365c9c6864b}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Hall
+VAR_INPUT
+    stInputs : ST_HallInputs;
+END_VAR
+
+VAR_OUTPUT
+    stOutputs : ST_HallOutputs;
+END_VAR
+
+VAR
+    fbSpots : FB_ButtonLight;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbSpots(
+    bButton := stInputs.bUpperButton,
+    bAdditionalButton := FALSE,
+    bSetValid := FALSE,
+    bTargetOn := FALSE,
+    bLightRelay => stOutputs.bOuterSpotsRelay
+);
+stOutputs.bMiddleSpotRelay := stOutputs.bOuterSpotsRelay;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

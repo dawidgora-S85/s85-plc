@@ -36,6 +36,9 @@
     <Compile Include="Infrastructure\IO\Simulation\GVLs\GVL_EntrywaySimulation.TcGVL">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Infrastructure\IO\Simulation\GVLs\GVL_HallSimulation.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Tests\Domains\Lighting\POUs\FB_LightTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>

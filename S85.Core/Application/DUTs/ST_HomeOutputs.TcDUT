@@ -5,6 +5,7 @@
 STRUCT
     Workshop : ST_WorkshopOutputs;
     Entryway : ST_EntrywayOutputs;
+    Hall : ST_HallOutputs;
 END_STRUCT
 END_TYPE]]></Declaration>
   </DUT>

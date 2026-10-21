@@ -9,11 +9,15 @@ VAR_IN_OUT
     bWorkshopLightRelay : BOOL;
     bEntrywayLightRelay : BOOL;
     bEntrywayTemporaryLightRelay : BOOL;
+    bHallOuterSpotsRelay : BOOL;
+    bHallMiddleSpotRelay : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[bWorkshopLightRelay := stOutputs.Workshop.bLightRelay;
 bEntrywayLightRelay := stOutputs.Entryway.bLightRelay;
-bEntrywayTemporaryLightRelay := stOutputs.Entryway.bTemporaryLightRelay;]]></ST>
+bEntrywayTemporaryLightRelay := stOutputs.Entryway.bTemporaryLightRelay;
+bHallOuterSpotsRelay := stOutputs.Hall.bOuterSpotsRelay;
+bHallMiddleSpotRelay := stOutputs.Hall.bMiddleSpotRelay;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

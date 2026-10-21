@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_HallSimulation" Id="{818a25ce-54ac-4fc2-a2ef-5916ec994a4d}">
+    <Declaration><![CDATA[VAR_GLOBAL
+    bUpperButton : BOOL;
+    bLowerButton : BOOL;
+    bOuterSpotsRelay : BOOL;
+    bMiddleSpotRelay : BOOL;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

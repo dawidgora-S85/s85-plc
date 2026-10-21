@@ -2,7 +2,7 @@
 <TcPlcObject Version="1.1.0.1">
   <GVL Name="GVL_EntrywaySimulation" Id="{72DAEA00-AA6D-4DC6-904D-FDBF7FF27CBA}">
     <Declaration><![CDATA[VAR_GLOBAL
-    bButton : BOOL;
+    bLowerButton : BOOL;
     bUpperButton : BOOL;
     bLightRelay : BOOL;
     bTemporaryLightRelay : BOOL;

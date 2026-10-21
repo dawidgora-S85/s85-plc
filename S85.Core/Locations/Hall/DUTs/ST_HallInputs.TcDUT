@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_HallInputs" Id="{90a41573-756d-42f1-9774-06324dce6a31}">
+    <Declaration><![CDATA[TYPE ST_HallInputs :
+STRUCT
+    bUpperButton : BOOL;
+    bLowerButton : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

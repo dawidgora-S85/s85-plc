@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_HallOutputs" Id="{6f05352e-02a2-45c4-9a58-d8076f2c820f}">
+    <Declaration><![CDATA[TYPE ST_HallOutputs :
+STRUCT
+    bOuterSpotsRelay : BOOL;
+    bMiddleSpotRelay : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

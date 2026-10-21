@@ -8,8 +8,10 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[
 stInputs.Workshop.bButton := GVL_WorkshopIO.bButton;
-stInputs.Entryway.bButton := GVL_EntrywayIO.bButton;
+stInputs.Entryway.bLowerButton := GVL_EntrywayIO.bLowerButton;
 stInputs.Entryway.bUpperButton := GVL_EntrywayIO.bUpperButton;
+stInputs.Hall.bUpperButton := GVL_HallIO.bUpperButton;
+stInputs.Hall.bLowerButton := GVL_HallIO.bLowerButton;
 ]]></ST>
     </Implementation>
   </POU>

@@ -7,14 +7,15 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[MappingInputs();
 MappingOutputs();
-FullChain();]]></ST>
+FullChain();
+HallSimulationChain();]]></ST>
     </Implementation>
     <Method Name="MappingInputs" Id="{0F2458A0-E5CC-483B-81E8-0485F0595D09}">
       <Declaration><![CDATA[METHOD PRIVATE MappingInputs
 VAR
     fbInputs : FB_SimulationInputs;
     bWorkshopButton : BOOL;
-    bEntrywayButton : BOOL;
+    bEntrywayLowerButton : BOOL;
     bEntrywayUpperButton : BOOL;
     stInputs : ST_HomeInputs;
 END_VAR]]></Declaration>
@@ -22,47 +23,47 @@ END_VAR]]></Declaration>
         <ST><![CDATA[TEST('Simulation inputs map all button fields');
 
 bWorkshopButton := FALSE;
-bEntrywayButton := FALSE;
+bEntrywayLowerButton := FALSE;
 bEntrywayUpperButton := FALSE;
 fbInputs(
     bWorkshopButton := bWorkshopButton,
-    bEntrywayButton := bEntrywayButton,
+    bEntrywayLowerButton := bEntrywayLowerButton,
     bEntrywayUpperButton := bEntrywayUpperButton,
     stInputs => stInputs);
 AssertTrue(Condition := NOT stInputs.Workshop.bButton, Message := 'Workshop button maps low');
-AssertTrue(Condition := NOT stInputs.Entryway.bButton, Message := 'Entryway button maps low');
+AssertTrue(Condition := NOT stInputs.Entryway.bLowerButton, Message := 'Entryway button maps low');
 AssertTrue(Condition := NOT stInputs.Entryway.bUpperButton, Message := 'Entryway upper button maps low');
 
 bWorkshopButton := TRUE;
 fbInputs(
     bWorkshopButton := bWorkshopButton,
-    bEntrywayButton := bEntrywayButton,
+    bEntrywayLowerButton := bEntrywayLowerButton,
     bEntrywayUpperButton := bEntrywayUpperButton,
     stInputs => stInputs);
 AssertTrue(Condition := stInputs.Workshop.bButton, Message := 'Workshop button maps high');
-AssertTrue(Condition := NOT stInputs.Entryway.bButton, Message := 'Entryway button remains low');
+AssertTrue(Condition := NOT stInputs.Entryway.bLowerButton, Message := 'Entryway button remains low');
 AssertTrue(Condition := NOT stInputs.Entryway.bUpperButton, Message := 'Entryway upper button remains low');
 
 bWorkshopButton := FALSE;
-bEntrywayButton := TRUE;
+bEntrywayLowerButton := TRUE;
 fbInputs(
     bWorkshopButton := bWorkshopButton,
-    bEntrywayButton := bEntrywayButton,
+    bEntrywayLowerButton := bEntrywayLowerButton,
     bEntrywayUpperButton := bEntrywayUpperButton,
     stInputs => stInputs);
 AssertTrue(Condition := NOT stInputs.Workshop.bButton, Message := 'Workshop button remains low');
-AssertTrue(Condition := stInputs.Entryway.bButton, Message := 'Entryway button maps high');
+AssertTrue(Condition := stInputs.Entryway.bLowerButton, Message := 'Entryway button maps high');
 AssertTrue(Condition := NOT stInputs.Entryway.bUpperButton, Message := 'Entryway upper button remains low');
 
-bEntrywayButton := FALSE;
+bEntrywayLowerButton := FALSE;
 bEntrywayUpperButton := TRUE;
 fbInputs(
     bWorkshopButton := bWorkshopButton,
-    bEntrywayButton := bEntrywayButton,
+    bEntrywayLowerButton := bEntrywayLowerButton,
     bEntrywayUpperButton := bEntrywayUpperButton,
     stInputs => stInputs);
 AssertTrue(Condition := NOT stInputs.Workshop.bButton, Message := 'Workshop button remains low');
-AssertTrue(Condition := NOT stInputs.Entryway.bButton, Message := 'Entryway button remains low');
+AssertTrue(Condition := NOT stInputs.Entryway.bLowerButton, Message := 'Entryway button remains low');
 AssertTrue(Condition := stInputs.Entryway.bUpperButton, Message := 'Entryway upper button maps high');
 
 TEST_FINISHED();]]></ST>
@@ -76,6 +77,8 @@ VAR
     bWorkshopLightRelay : BOOL;
     bEntrywayLightRelay : BOOL;
     bEntrywayTemporaryLightRelay : BOOL;
+    bHallOuterSpotsRelay : BOOL;
+    bHallMiddleSpotRelay : BOOL;
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[TEST('Simulation outputs map all relay fields');
@@ -83,14 +86,20 @@ END_VAR]]></Declaration>
 bWorkshopLightRelay := TRUE;
 bEntrywayLightRelay := TRUE;
 bEntrywayTemporaryLightRelay := TRUE;
+bHallOuterSpotsRelay := TRUE;
+bHallMiddleSpotRelay := TRUE;
 stOutputs.Workshop.bLightRelay := FALSE;
 stOutputs.Entryway.bLightRelay := FALSE;
 stOutputs.Entryway.bTemporaryLightRelay := FALSE;
+stOutputs.Hall.bOuterSpotsRelay := FALSE;
+stOutputs.Hall.bMiddleSpotRelay := FALSE;
 fbOutputs(
     stOutputs := stOutputs,
     bWorkshopLightRelay := bWorkshopLightRelay,
     bEntrywayLightRelay := bEntrywayLightRelay,
-    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay);
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
 AssertTrue(Condition := NOT bWorkshopLightRelay, Message := 'Workshop relay maps low');
 AssertTrue(Condition := NOT bEntrywayLightRelay, Message := 'Entryway relay maps low');
 AssertTrue(Condition := NOT bEntrywayTemporaryLightRelay, Message := 'Entryway temporary relay maps low');
@@ -100,7 +109,9 @@ fbOutputs(
     stOutputs := stOutputs,
     bWorkshopLightRelay := bWorkshopLightRelay,
     bEntrywayLightRelay := bEntrywayLightRelay,
-    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay);
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
 AssertTrue(Condition := bWorkshopLightRelay, Message := 'Workshop relay maps high');
 AssertTrue(Condition := NOT bEntrywayLightRelay, Message := 'Entryway relay remains low');
 AssertTrue(Condition := NOT bEntrywayTemporaryLightRelay, Message := 'Entryway temporary relay remains low');
@@ -111,7 +122,9 @@ fbOutputs(
     stOutputs := stOutputs,
     bWorkshopLightRelay := bWorkshopLightRelay,
     bEntrywayLightRelay := bEntrywayLightRelay,
-    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay);
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
 AssertTrue(Condition := NOT bWorkshopLightRelay, Message := 'Workshop relay remains low');
 AssertTrue(Condition := bEntrywayLightRelay, Message := 'Entryway relay maps high');
 AssertTrue(Condition := NOT bEntrywayTemporaryLightRelay, Message := 'Entryway temporary relay remains low');
@@ -122,7 +135,9 @@ fbOutputs(
     stOutputs := stOutputs,
     bWorkshopLightRelay := bWorkshopLightRelay,
     bEntrywayLightRelay := bEntrywayLightRelay,
-    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay);
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
 AssertTrue(Condition := NOT bWorkshopLightRelay, Message := 'Workshop relay remains low');
 AssertTrue(Condition := NOT bEntrywayLightRelay, Message := 'Entryway relay remains low');
 AssertTrue(Condition := bEntrywayTemporaryLightRelay, Message := 'Entryway temporary relay maps high');
@@ -132,7 +147,9 @@ fbOutputs(
     stOutputs := stOutputs,
     bWorkshopLightRelay := bWorkshopLightRelay,
     bEntrywayLightRelay := bEntrywayLightRelay,
-    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay);
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
 AssertTrue(Condition := NOT bWorkshopLightRelay, Message := 'Workshop relay maps low again');
 AssertTrue(Condition := NOT bEntrywayLightRelay, Message := 'Entryway relay maps low again');
 AssertTrue(Condition := NOT bEntrywayTemporaryLightRelay, Message := 'Entryway temporary relay maps low again');
@@ -149,11 +166,13 @@ VAR
     stInputs : ST_HomeInputs;
     stOutputs : ST_HomeOutputs;
     bWorkshopButton : BOOL;
-    bEntrywayButton : BOOL;
+    bEntrywayLowerButton : BOOL;
     bEntrywayUpperButton : BOOL;
     bWorkshopLightRelay : BOOL;
     bEntrywayLightRelay : BOOL;
     bEntrywayTemporaryLightRelay : BOOL;
+    bHallOuterSpotsRelay : BOOL;
+    bHallMiddleSpotRelay : BOOL;
     bExpectedWorkshopRelay : BOOL;
     bExpectedEntrywayRelay : BOOL;
     bExpectedEntrywayTemporaryRelay : BOOL;
@@ -166,17 +185,19 @@ END_VAR]]></Declaration>
 bWorkshopLightRelay := TRUE;
 bEntrywayLightRelay := TRUE;
 bEntrywayTemporaryLightRelay := TRUE;
+bHallOuterSpotsRelay := TRUE;
+bHallMiddleSpotRelay := TRUE;
 
 FOR nCircuit := 1 TO 3 DO
     FOR nStep := 0 TO 4 DO
         bWorkshopButton := FALSE;
-        bEntrywayButton := FALSE;
+        bEntrywayLowerButton := FALSE;
         bEntrywayUpperButton := FALSE;
 
         IF (nStep = 1) OR (nStep = 3) THEN
             CASE nCircuit OF
                 1: bWorkshopButton := TRUE;
-                2: bEntrywayButton := TRUE;
+                2: bEntrywayLowerButton := TRUE;
                 3: bEntrywayUpperButton := TRUE;
             END_CASE;
         END_IF;
@@ -187,7 +208,7 @@ FOR nCircuit := 1 TO 3 DO
 
         fbInputs(
             bWorkshopButton := bWorkshopButton,
-            bEntrywayButton := bEntrywayButton,
+            bEntrywayLowerButton := bEntrywayLowerButton,
             bEntrywayUpperButton := bEntrywayUpperButton,
             stInputs => stInputs);
         fbHome(stInputs := stInputs, stOutputs => stOutputs);
@@ -195,7 +216,9 @@ FOR nCircuit := 1 TO 3 DO
             stOutputs := stOutputs,
             bWorkshopLightRelay := bWorkshopLightRelay,
             bEntrywayLightRelay := bEntrywayLightRelay,
-            bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay);
+            bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+            bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+            bHallMiddleSpotRelay := bHallMiddleSpotRelay);
 
         AssertTrue(Condition := stOutputs.Workshop.bLightRelay = bExpectedWorkshopRelay, Message := 'Core workshop relay follows its button sequence');
         AssertTrue(Condition := stOutputs.Entryway.bLightRelay = bExpectedEntrywayRelay, Message := 'Core entryway relay follows its button sequence');
@@ -205,6 +228,84 @@ FOR nCircuit := 1 TO 3 DO
         AssertTrue(Condition := bEntrywayTemporaryLightRelay = bExpectedEntrywayTemporaryRelay, Message := 'Entryway temporary relay reaches private endpoint');
     END_FOR;
 END_FOR;
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="HallSimulationChain" Id="{be317531-6179-493c-a99d-716513c74d78}">
+      <Declaration><![CDATA[METHOD PRIVATE HallSimulationChain
+VAR
+    fbInputs : FB_SimulationInputs;
+    fbOutputs : FB_SimulationOutputs;
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    bHallUpperButton : BOOL;
+    bHallLowerButton : BOOL;
+    bWorkshopLightRelay : BOOL;
+    bEntrywayLightRelay : BOOL;
+    bEntrywayTemporaryLightRelay : BOOL;
+    bHallOuterSpotsRelay : BOOL;
+    bHallMiddleSpotRelay : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Hall simulation adapters propagate private inputs through Core to private relay endpoints');
+
+bHallUpperButton := FALSE;
+bHallLowerButton := FALSE;
+fbInputs(
+    bWorkshopButton := FALSE,
+    bEntrywayLowerButton := FALSE,
+    bEntrywayUpperButton := FALSE,
+    bHallUpperButton := bHallUpperButton,
+    bHallLowerButton := bHallLowerButton,
+    stInputs => stInputs);
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+fbOutputs(
+    stOutputs := stOutputs,
+    bWorkshopLightRelay := bWorkshopLightRelay,
+    bEntrywayLightRelay := bEntrywayLightRelay,
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
+
+bHallLowerButton := TRUE;
+fbInputs(
+    bWorkshopButton := FALSE,
+    bEntrywayLowerButton := FALSE,
+    bEntrywayUpperButton := FALSE,
+    bHallUpperButton := bHallUpperButton,
+    bHallLowerButton := bHallLowerButton,
+    stInputs => stInputs);
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+fbOutputs(
+    stOutputs := stOutputs,
+    bWorkshopLightRelay := bWorkshopLightRelay,
+    bEntrywayLightRelay := bEntrywayLightRelay,
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
+AssertTrue(Condition := bEntrywayLightRelay, Message := 'Hall lower button reaches private Entryway endpoint');
+
+bHallLowerButton := FALSE;
+bHallUpperButton := TRUE;
+fbInputs(
+    bWorkshopButton := FALSE,
+    bEntrywayLowerButton := FALSE,
+    bEntrywayUpperButton := FALSE,
+    bHallUpperButton := bHallUpperButton,
+    bHallLowerButton := bHallLowerButton,
+    stInputs => stInputs);
+fbHome(stInputs := stInputs, stOutputs => stOutputs);
+fbOutputs(
+    stOutputs := stOutputs,
+    bWorkshopLightRelay := bWorkshopLightRelay,
+    bEntrywayLightRelay := bEntrywayLightRelay,
+    bEntrywayTemporaryLightRelay := bEntrywayTemporaryLightRelay,
+    bHallOuterSpotsRelay := bHallOuterSpotsRelay,
+    bHallMiddleSpotRelay := bHallMiddleSpotRelay);
+AssertTrue(Condition := bHallOuterSpotsRelay AND bHallMiddleSpotRelay, Message := 'Hall upper reaches both private spot endpoints');
+AssertTrue(Condition := bEntrywayLightRelay, Message := 'Hall upper leaves Entryway endpoint unchanged');
 
 TEST_FINISHED();]]></ST>
       </Implementation>

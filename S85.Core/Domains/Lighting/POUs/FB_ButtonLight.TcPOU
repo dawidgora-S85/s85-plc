@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
-  <POU Name="FB_Workshop" Id="{4cb4c94a-a979-4da1-85e5-4bfab4a678c9}" SpecialFunc="None">
-    <Declaration><![CDATA[FUNCTION_BLOCK FB_Workshop
+  <POU Name="FB_ButtonLight" Id="{4cb4c94a-a979-4da1-85e5-4bfab4a678c9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ButtonLight
 VAR_INPUT
     bButton : BOOL;
+    bAdditionalButton : BOOL;
     bSetValid : BOOL;
     bTargetOn : BOOL;
 END_VAR
@@ -15,6 +16,7 @@ END_VAR
 VAR
     fbLight : FB_Light;
     bArmed : BOOL;
+    bAdditionalArmed : BOOL;
     bToggle : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
@@ -24,6 +26,13 @@ IF NOT bButton THEN
     bArmed := TRUE;
 ELSIF bArmed THEN
     bArmed := FALSE;
+    bToggle := TRUE;
+END_IF
+
+IF NOT bAdditionalButton THEN
+    bAdditionalArmed := TRUE;
+ELSIF bAdditionalArmed THEN
+    bAdditionalArmed := FALSE;
     bToggle := TRUE;
 END_IF
 

@@ -10,11 +10,11 @@ END_VAR]]></Declaration>
     <Method Name="ButtonStartupAndPressHoldReleaseRepress" Id="{C13132A1-734D-4859-99DA-5D622D9F4CBA}">
       <Declaration><![CDATA[METHOD PRIVATE ButtonStartupAndPressHoldReleaseRepress
 VAR
-    fbWorkshop : FB_Workshop;
-    fbStartupHigh : FB_Workshop;
-    fbEntryway : FB_Workshop;
-    fbEntrywayUpper : FB_Workshop;
-    fbUpperStartupHigh : FB_Workshop;
+    fbWorkshop : FB_ButtonLight;
+    fbStartupHigh : FB_ButtonLight;
+    fbEntryway : FB_ButtonLight;
+    fbEntrywayUpper : FB_ButtonLight;
+    fbUpperStartupHigh : FB_ButtonLight;
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[TEST('Workshop, entryway, and upper button toggle sequences');

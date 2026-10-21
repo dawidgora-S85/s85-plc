@@ -3,7 +3,7 @@
   <DUT Name="ST_EntrywayInputs" Id="{c7580358-4cba-4ea5-a8b1-488aab250f69}">
     <Declaration><![CDATA[TYPE ST_EntrywayInputs :
 STRUCT
-    bButton : BOOL;
+    bLowerButton : BOOL;
     bUpperButton : BOOL;
 END_STRUCT
 END_TYPE]]></Declaration>

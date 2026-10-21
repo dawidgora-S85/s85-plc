@@ -68,22 +68,27 @@ If Login prompts for a download, stop unless that download is separately authori
 LOCAL `MAIN` reads these simulation inputs and writes these simulation outputs:
 
 - `GVL_WorkshopSimulation.bButton`
-- `GVL_EntrywaySimulation.bButton`
+- `GVL_EntrywaySimulation.bLowerButton`
 - `GVL_EntrywaySimulation.bUpperButton`
+- `GVL_HallSimulation.bUpperButton`
+- `GVL_HallSimulation.bLowerButton`
 - `GVL_WorkshopSimulation.bLightRelay`
 - `GVL_EntrywaySimulation.bLightRelay`
 - `GVL_EntrywaySimulation.bTemporaryLightRelay`
+- `GVL_HallSimulation.bOuterSpotsRelay`
+- `GVL_HallSimulation.bMiddleSpotRelay`
 
 `PlcTask` calls `MAIN` and `PRG_Tests`; `PRG_Tests` calls `TcUnit.RUN()`.
-The test suites are `fbButtonTests`, `fbLightTests`, `fbWorkshopTests`, `fbHomeTests`, `fbLightCatalogTests`, `fbLocalIntegrationTests`, `fbLightCommandTests`, `fbMqttLightProtocolTests` and `fbMqttConfigParserTests`.
+The test suites are `fbButtonTests`, `fbLightTests`, `fbWorkshopTests`, `fbHomeTests`, `fbLightCatalogTests`, `fbLocalIntegrationTests`, `fbLightCommandTests`, `fbMqttLightProtocolTests`, `fbMqttConfigParserTests` and `fbMqttIntegrationQueueTests`.
 Run them only in the authorized LOCAL PLC session.
-The current source defines 31 tests in nine suites: Button 5, Light 4, Workshop 1, Home 1, LightCatalog 1, LocalIntegration 3, LightCommand 5, MqttLightProtocol 7 and MqttConfigParser 4. These are source counts, not execution results.
+The current source defines 36 tests in ten suites: Button 5, Light 4, Workshop 1, Home 2, LightCatalog 1, LocalIntegration 4, LightCommand 5, MqttLightProtocol 7, MqttConfigParser 4 and MqttIntegrationQueue 3. These are source counts, not execution results.
+The Hall controls are not in the MQTT light catalog because no light ID was supplied.
 See [MQTT light integration](mqtt-light.md) for broker configuration, topics and commissioning checks.
 
 A Watch List is not required to check the results.
 After separate authorization for LOCAL online reads, use the XAE PLC Symbol Browser or an approved ADS symbol reader.
 Expand `PRG_Tests`, then each suite instance and its `Tests` array.
-Confirm the expected test counts: Button 5, Light 4, Workshop 1, Home 1, LightCatalog 1, LocalIntegration 3, LightCommand 5, MqttLightProtocol 7 and MqttConfigParser 4.
+Confirm the expected test counts: Button 5, Light 4, Workshop 1, Home 2, LightCatalog 1, LocalIntegration 4, LightCommand 5, MqttLightProtocol 7, MqttConfigParser 4 and MqttIntegrationQueue 3.
 Zero or missing tests are not a pass.
 Read `NumberOfTests` and inspect indices `1` through that count.
 Each active test must have `TestIsFinished=TRUE`, `TestIsFailed=FALSE` and `TestIsSkipped=FALSE`.
@@ -101,16 +106,28 @@ No verified UmRT stop batch is documented here; use only an approved native stop
 
 ## Hardware mappings
 
-The production system maps these BOOL variables through Device 1 (EtherCAT), Term 1 (EK1200):
+The project uses ED1809 input terminals and ED2809 output terminals under Device 1 (EtherCAT), Term 1 (EK1200).
+The `DI` and `DO` labels follow the user-approved screenshot order, separately for inputs and outputs.
+The field wiring has not been inspected, so confirm each terminal against the installed hardware before commissioning.
 
-- `GVL_WorkshopIO.bButton` at `%I*`: Term 3 (ED1809), DI Channel 1, Input.
-- `GVL_EntrywayIO.bButton` at `%I*`: Term 3 (ED1809), DI Channel 2, Input.
-- `GVL_EntrywayIO.bUpperButton` at `%I*`: Term 3 (ED1809), DI Channel 3, Input.
-- `GVL_WorkshopIO.bLightRelay` at `%Q*`: Term 4 (ED2809), DO Channel 1, Output.
-- `GVL_EntrywayIO.bLightRelay` at `%Q*`: Term 4 (ED2809), DO Channel 2, Output.
-- `GVL_EntrywayIO.bTemporaryLightRelay` at `%Q*`: Term 4 (ED2809), DO Channel 3, Output.
+| Alias | Terminal | Channel | PLC variable | Function | Wiring reference |
+|---|---|---:|---|---|---|
+| DI01 | Term 8 (ED1809) | 1 | `GVL_EntrywayIO.bUpperButton` | Entryway upper button | W.0007 ZUG W.0003 1-3 GN |
+| DI01 | Term 8 (ED1809) | 2 | `GVL_EntrywayIO.bLowerButton` | Entryway lower button | W.0008 ZUG W.0003 2-1 BU |
+| DI01 | Term 8 (ED1809) | 3 | `GVL_HallIO.bUpperButton` | Hall upper button | W.0022 ZUG W.0005 1-3 GN |
+| DI01 | Term 8 (ED1809) | 4 | `GVL_HallIO.bLowerButton` | Hall lower button | W.0023 ZUG W.0005 2-1 BU |
+| DI06 | Term 13 (ED1809) | 1 | `GVL_WorkshopIO.bButton` | Workshop button | W.0006 ZUG W.0001 1-3 GN |
+| DO01 | Term 4 (ED2809) | 1 | `GVL_EntrywayIO.bLightRelay` | Entryway light relay | W.0009 WAGO #1 |
+| DO01 | Term 4 (ED2809) | 2 | `GVL_HallIO.bOuterSpotsRelay` | Hall outer spots relay | W.0010 WAGO #2 |
+| DO01 | Term 4 (ED2809) | 3 | `GVL_HallIO.bMiddleSpotRelay` | Hall middle spot relay | W.0011 WAGO #3 |
+| DO06 | Term 21 (ED2809) | 1 | `GVL_WorkshopIO.bLightRelay` | Workshop light relay | W.0024 WAGO #40 |
+| DO06 | Term 21 (ED2809) | 2 | `GVL_EntrywayIO.bTemporaryLightRelay` | Entryway temporary light relay | W.0025 WAGO #41 |
 
-The production mapping is stored in `S85.PROD/S85.PROD.tsproj`.
+GN and BU identify pair conductors at ZUG. They do not confirm installed wire colors.
+Each output commands its WAGO relay, not a luminaire directly.
+Output color references are informational: W.0026 #1 Entryway BN, W.0027 #2 outer spots BK, W.0028 #3 middle spot BN, and W.0029 #40 Workshop BN. W.0030 #41 temporary light has no recorded color.
+The channel numbers identify module channels, not addresses.
+All mappings are stored in `S85.PROD/S85.PROD.tsproj`.
 
 ## Before activation
 
@@ -123,9 +140,14 @@ The production mapping is stored in `S85.PROD/S85.PROD.tsproj`.
 
 ## Button behavior
 
-At startup, the relay command is OFF.
-The application ignores a button already reading TRUE until release and a new press.
-Each new press toggles the relay; holding or releasing the button leaves the relay unchanged.
+At startup, all relay commands are OFF.
+The application ignores each button already reading TRUE until that button is released and pressed again.
+The Entryway lower button and Hall lower button toggle the Entryway main light relay; simultaneous new presses cause one toggle.
+If both are newly pressed in the same scan, they cause one toggle.
+The Entryway upper button toggles the temporary light relay.
+The Hall upper button toggles both spot relays together.
+The Workshop button toggles its own light relay.
+Holding or releasing a button does not toggle a relay.
 
 ## Verification
 

@@ -16,6 +16,7 @@ END_VAR
 VAR
     fbWorkshop : FB_Location_Workshop;
     fbEntryway : FB_Location_Entryway;
+    fbHall : FB_Location_Hall;
 END_VAR
 ]]></Declaration>
     <Implementation>
@@ -27,8 +28,14 @@ END_VAR
 
 fbEntryway(
     stInputs := stInputs.Entryway,
+    bAdditionalLowerButton := stInputs.Hall.bLowerButton,
     stCommand := stCommand,
     stOutputs => stOutputs.Entryway
+);
+
+fbHall(
+    stInputs := stInputs.Hall,
+    stOutputs => stOutputs.Hall
 );
 
 aLights[1] := fbWorkshop.stLight;

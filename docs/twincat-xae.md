@@ -18,7 +18,7 @@ For LOCAL runtime setup and test results, read [LOCAL runtime and tests](worksho
 
 - The physical project roots are `S85.Core/`, `S85.LOCAL/S85.LOCAL/` and `S85.PROD/S85/`.
 - Core's `Application` folder contains the home application DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs.
-- `Domains/Lighting` and `Shared` remain unchanged. `FB_Workshop` stays in `Locations/Workshop/POUs` as behavior separate from the `FB_Location_Workshop` contract adapter.
+- `Domains/Lighting` contains neutral shared light behavior (`FB_ButtonLight`). Workshop, Entryway and Hall composition remains in their location adapters.
 - LOCAL uses x64, with simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.
 - PROD uses ARMv8 and physical Beckhoff I/O under `Infrastructure/IO/Beckhoff/{POUs,GVLs}`.
 - Core provides shared, environment-independent home logic. LOCAL provides simulation and TcUnit tests, while PROD connects to physical Beckhoff I/O.
