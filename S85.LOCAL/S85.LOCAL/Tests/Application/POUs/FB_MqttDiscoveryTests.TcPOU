@@ -14,6 +14,9 @@ ContradictoryAndReplayCoalescing();
 RejectedFairnessAndPayloadBounds();
 ReplayProgressCoalesces();
 ForceReplayInvalidatesObservedDesired();
+Utf8FriendlyNamesAndIdentity();
+AllHomeLightsKeepCentralMetadata();
+Utf8MalformedNamesFailClosed();
 JsonEscapingAndMetadataBounds();
 InvalidCatalogsFailClosed();
 NamespaceAndSnapshotPreserveFifo();
@@ -363,6 +366,165 @@ fb.UpdateCatalog(aLights := a);
 AssertTrue(Condition := fb.bValid AND fb.bCatalogChanged, Message := 'Name-only desired payload change is reported as a catalog change');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
+    <Method Name="Utf8FriendlyNamesAndIdentity" Id="{a4ee193f-6f35-48ca-bc25-1cbdb192db59}">
+      <Declaration><![CDATA[METHOD PRIVATE Utf8FriendlyNamesAndIdentity
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+    fbLocal : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sOldTopic : STRING(255);
+    sOldPayload : STRING(2047);
+    sRenamedPayload : STRING(2047);
+    nPayloadLength : UDINT;
+    nNameStart : UDINT;
+    nFind : DINT;
+    bPayloadTerminated : BOOL;
+    bUtf8BytesPresent : BOOL;
+    bLocalBoundaryValid : BOOL;
+    bLocalFinalCharacterPresent : BOOL;
+    bProdBoundaryValid : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('UTF-8 Polish names preserve exact bytes and stable discovery identity');
+IF TcUnit.IS_TEST_FINISHED('UTF-8 Polish names preserve exact bytes and stable discovery identity') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := UTF8#'Warsztat'; a[1].sId := 'main'; a[1].sName := UTF8#'Oświetlenie główne';
+fb.bTestNamespace := FALSE; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid AND fb.bPublishPending, Message := 'Polish UTF-8 names are valid in PROD namespace');
+sOldTopic := fb.sTopic; sOldPayload := fb.sPayload;
+AssertTrue(Condition := PayloadFind(sValue := fb.sPayload, sNeedle := UTF8#'"Warsztat - Oświetlenie główne"') > 0, Message := 'Payload contains exact Polish UTF-8 device-name bytes');
+AssertTrue(Condition := PayloadFind(sValue := fb.sPayload, sNeedle := '"mf":"S85","mdl":"PLC Light"') > 0, Message := 'Central manufacturer and model metadata are present');
+AssertTrue(Condition := PayloadFind(sValue := fb.sPayload, sNeedle := '"name":null') > 0 AND PayloadFind(sValue := fb.sPayload, sNeedle := '"ids":["s85_482E30312D3039_light_6D61696E"]') > 0, Message := 'Component null name and stable device identity are emitted');
+AssertTrue(Condition := PayloadFind(sValue := fb.sPayload, sNeedle := '"unique_id":"s85_482E30312D3039_light_6D61696E"') > 0, Message := 'Component unique_id remains unchanged');
+nPayloadLength := PayloadByteLength(sValue := fb.sPayload);
+bPayloadTerminated := FALSE;
+IF (nPayloadLength > 0) AND (nPayloadLength < SIZEOF(fb.sPayload)) THEN bPayloadTerminated := fb.sPayload[nPayloadLength] = 0; END_IF
+AssertTrue(Condition := bPayloadTerminated, Message := 'Known discovery payload has a verified NUL byte at its measured byte length');
+nFind := PayloadFind(sValue := fb.sPayload, sNeedle := UTF8#'ś');
+bUtf8BytesPresent := FALSE;
+IF (nFind > 0) AND (nFind < 2048) THEN bUtf8BytesPresent := (fb.sPayload[nFind - 1] = 197) AND (fb.sPayload[nFind] = 155); END_IF
+AssertTrue(Condition := bUtf8BytesPresent, Message := 'UTF-8 bytes for a Polish character are copied unchanged');
+a[1].sName := UTF8#'Oświetlenie nowe'; fb.Plan(aLights := a); sRenamedPayload := fb.sPayload;
+AssertTrue(Condition := fb.sTopic = sOldTopic AND sRenamedPayload <> sOldPayload, Message := 'Name-only update preserves topic and changes payload');
+AssertTrue(Condition := PayloadFind(sValue := sRenamedPayload, sNeedle := '"ids":["s85_482E30312D3039_light_6D61696E"]') > 0 AND PayloadFind(sValue := sRenamedPayload, sNeedle := '"unique_id":"s85_482E30312D3039_light_6D61696E"') > 0, Message := 'Device and component identities remain unchanged after rename');
+fb.Observe(sObservedTopic := sOldTopic, pObservedPayload := ADR(sOldPayload), nObservedPayloadSize := PayloadByteLength(sValue := sOldPayload)); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Old name payload cannot settle renamed desired configuration');
+fb.Observe(sObservedTopic := sOldTopic, pObservedPayload := ADR(sRenamedPayload), nObservedPayloadSize := PayloadByteLength(sValue := sRenamedPayload)); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady AND (fb.nPendingOrphanCount = 0), Message := 'Exact renamed UTF-8 payload settles without orphan cleanup');
+fbLocal.bTestNamespace := TRUE; a[1].sName := UTF8#'Oświetlenie główne'; fbLocal.Plan(aLights := a);
+AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := UTF8#'"TEST: Warsztat - Oświetlenie główne"') > 0, Message := 'LOCAL prefix occurs once before combined name');
+AssertFalse(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := 'TEST: TEST:') > 0, Message := 'Null component name prevents double prefix');
+AssertFalse(Condition := PayloadFind(sValue := fb.sPayload, sNeedle := 'TEST:') > 0, Message := 'PROD device name has no LOCAL prefix');
+FOR nPayloadLength := 0 TO 31 DO
+    a[1].sLocationName[2 * nPayloadLength] := 16#C4; a[1].sLocationName[2 * nPayloadLength + 1] := 16#85;
+    a[1].sName[2 * nPayloadLength] := 16#C4; a[1].sName[2 * nPayloadLength + 1] := 16#85;
+END_FOR
+a[1].sLocationName[64] := 0; a[1].sName[64] := 0;
+fbLocal.Plan(aLights := a);
+nPayloadLength := PayloadByteLength(sValue := fbLocal.sPayload);
+nFind := PayloadFind(sValue := fbLocal.sPayload, sNeedle := 'TEST:');
+bLocalBoundaryValid := FALSE; bLocalFinalCharacterPresent := FALSE;
+IF nFind > 0 THEN
+    nNameStart := DINT_TO_UDINT(nFind - 1);
+    IF (nPayloadLength < SIZEOF(fbLocal.sPayload)) AND (nNameStart + 138 < nPayloadLength) THEN
+        bLocalBoundaryValid := fbLocal.sPayload[nNameStart + 137] = 34 AND fbLocal.sPayload[nNameStart + 138] = 44;
+        bLocalFinalCharacterPresent := (fbLocal.sPayload[nNameStart + 135] = 196) AND (fbLocal.sPayload[nNameStart + 136] = 133);
+    END_IF
+END_IF
+AssertTrue(Condition := fbLocal.bValid AND bLocalBoundaryValid, Message := 'Exactly 137 device-name bytes are followed by closing quote and metadata separator');
+AssertTrue(Condition := bLocalFinalCharacterPresent AND (PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"mf":"S85"') > 0), Message := 'Final two-byte character is complete and following metadata is present');
+fb.Plan(aLights := a);
+nPayloadLength := PayloadByteLength(sValue := fb.sPayload);
+nFind := PayloadFind(sValue := fb.sPayload, sNeedle := ' - ');
+bProdBoundaryValid := FALSE;
+IF (nFind > 65) AND (nPayloadLength < SIZEOF(fb.sPayload)) THEN
+    nNameStart := DINT_TO_UDINT(nFind - 65);
+    IF nNameStart + 131 < nPayloadLength THEN bProdBoundaryValid := (fb.sPayload[nNameStart + 129] = 196) AND (fb.sPayload[nNameStart + 130] = 133) AND (fb.sPayload[nNameStart + 131] = 34); END_IF
+END_IF
+AssertTrue(Condition := fb.bValid AND bProdBoundaryValid, Message := 'PROD name is 131 bytes and retains its final complete character and quote');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="AllHomeLightsKeepCentralMetadata" Id="{90bf1414-2951-4f7c-9330-c34b4b748b20}">
+      <Declaration><![CDATA[METHOD PRIVATE AllHomeLightsKeepCentralMetadata
+VAR_INST
+    fbLocal : S85Core.FB_MqttDiscovery;
+    fbProd : S85Core.FB_MqttDiscovery;
+    fbHome : S85Core.FB_Home;
+END_VAR
+VAR
+    stInputs : S85Core.ST_HomeInputs;
+    a : ARRAY[1..6] OF ST_LightInfo;
+    i : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('All six home lights share discovery metadata and preserve namespaces');
+IF TcUnit.IS_TEST_FINISHED('All six home lights share discovery metadata and preserve namespaces') THEN RETURN; END_IF
+fbHome(stInputs := stInputs);
+a := fbHome.aLights;
+fbLocal.bTestNamespace := TRUE; fbProd.bTestNamespace := FALSE;
+FOR i := 1 TO 6 DO
+    fbLocal.Plan(aLights := a); fbProd.Plan(aLights := a);
+    AssertTrue(Condition := fbLocal.bValid AND fbLocal.bPublishPending AND fbProd.bValid AND fbProd.bPublishPending, Message := 'Home light is admitted in both complete catalogs');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"mf":"S85","mdl":"PLC Light"') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := '"mf":"S85","mdl":"PLC Light"') > 0, Message := 'Manufacturer and model are shared across all six lights and namespaces');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"name":null') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := '"name":null') > 0, Message := 'Both discovery payloads keep component name null');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sTopic, sNeedle := 'homeassistant/device/s85_test/') > 0 AND PayloadFind(sValue := fbLocal.sPayload, sNeedle := 'TEST: ') > 0, Message := 'LOCAL uses test topic and device prefix');
+    AssertTrue(Condition := PayloadFind(sValue := fbProd.sTopic, sNeedle := 'homeassistant/device/s85/') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := 'TEST:') = 0, Message := 'PROD uses production topic with no test prefix');
+    fbLocal.Observe(sObservedTopic := fbLocal.sTopic, pObservedPayload := ADR(fbLocal.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fbLocal.sPayload));
+    fbProd.Observe(sObservedTopic := fbProd.sTopic, pObservedPayload := ADR(fbProd.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fbProd.sPayload));
+END_FOR
+fbLocal.Plan(aLights := a); fbProd.Plan(aLights := a);
+AssertTrue(Condition := fbLocal.bReady AND fbProd.bReady, Message := 'All six exact observations settle in both namespaces');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="Utf8MalformedNamesFailClosed" Id="{1a450b36-e69b-493d-a006-388b91774276}">
+      <Declaration><![CDATA[METHOD PRIVATE Utf8MalformedNamesFailClosed
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    aBad : ARRAY[1..19] OF STRING(64);
+    i : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Malformed and forbidden UTF-8 friendly names fail closed');
+IF TcUnit.IS_TEST_FINISHED('Malformed and forbidden UTF-8 friendly names fail closed') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Valid'; a[1].sId := 'main'; a[1].sName := 'Valid';
+aBad[1][0] := 16#80;
+aBad[2][0] := 16#C0; aBad[2][1] := 16#AF;
+aBad[3][0] := 16#C1; aBad[3][1] := 16#BF;
+aBad[4][0] := 16#C2;
+aBad[5][0] := 16#E2; aBad[5][1] := 16#82;
+aBad[6][0] := 16#F0; aBad[6][1] := 16#9F; aBad[6][2] := 16#98;
+aBad[7][0] := 16#E2; aBad[7][1] := 16#28; aBad[7][2] := 16#A1;
+aBad[8][0] := 16#E0; aBad[8][1] := 16#80; aBad[8][2] := 16#80;
+aBad[9][0] := 16#ED; aBad[9][1] := 16#A0; aBad[9][2] := 16#80;
+aBad[10][0] := 16#F0; aBad[10][1] := 16#80; aBad[10][2] := 16#80; aBad[10][3] := 16#80;
+aBad[11][0] := 16#F4; aBad[11][1] := 16#90; aBad[11][2] := 16#80; aBad[11][3] := 16#80;
+aBad[12][0] := 16#F5; aBad[12][1] := 16#80; aBad[12][2] := 16#80; aBad[12][3] := 16#80;
+aBad[13][0] := 16#FF;
+aBad[14][0] := 16#1F;
+aBad[16][0] := 16#C2; aBad[16][1] := 16#80;
+FOR i := 0 TO 62 DO aBad[17][i] := 65; END_FOR
+aBad[17][63] := 16#C2;
+aBad[18][0] := 16#C2; aBad[18][1] := 65;
+aBad[19][0] := 16#F0; aBad[19][1] := 16#90; aBad[19][2] := 16#80; aBad[19][3] := 65;
+FOR i := 1 TO 19 DO
+    IF i = 15 THEN a[1].sName := ''; ELSE a[1].sName := aBad[i]; END_IF
+    fb.Plan(aLights := a);
+    AssertFalse(Condition := fb.bValid OR fb.bPublishPending, Message := 'Malformed, empty, or forbidden name rejects complete catalog');
+END_FOR
+a[1].sName := UTF8#'¢€😀'; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid, Message := 'Valid two, three, and four byte UTF-8 sequences are accepted');
+a[1].sName[0] := 16#E0; a[1].sName[1] := 16#A0; a[1].sName[2] := 16#80; a[1].sName[3] := 0; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid, Message := 'Lowest non-overlong three-byte sequence is accepted');
+a[1].sName[0] := 16#ED; a[1].sName[1] := 16#9F; a[1].sName[2] := 16#BF; a[1].sName[3] := 0; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid, Message := 'Highest non-surrogate three-byte sequence is accepted');
+a[1].sName[0] := 16#F0; a[1].sName[1] := 16#90; a[1].sName[2] := 16#80; a[1].sName[3] := 16#80; a[1].sName[4] := 0; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid, Message := 'Lowest four-byte sequence is accepted');
+a[1].sName[0] := 16#F4; a[1].sName[1] := 16#8F; a[1].sName[2] := 16#BF; a[1].sName[3] := 16#BF; a[1].sName[4] := 0;
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid, Message := 'Maximum Unicode scalar U+10FFFF is accepted');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
     <Method Name="JsonEscapingAndMetadataBounds" Id="{ccfb21ea-8cb1-4d3a-b5be-25e6c5f0f308}">
       <Declaration><![CDATA[METHOD PRIVATE JsonEscapingAndMetadataBounds
 VAR_INST
@@ -388,7 +550,7 @@ FOR i := 0 TO SIZEOF(fb.sPayload) - 1 DO IF fb.sPayload[i] = 0 THEN nLength := i
 AssertTrue(Condition := nLength > 0 AND nLength < SIZEOF(fb.sPayload), Message := 'Escaped payload is NUL terminated within full buffer');
 nNameStart := 0;
 IF nLength > 0 THEN
-    nFoundPosition := FIND(fb.sPayload, 'Lamp');
+    nFoundPosition := PayloadFind(sValue := fb.sPayload, sNeedle := 'Lamp');
     IF nFoundPosition > 0 THEN nNameStart := DINT_TO_UDINT(nFoundPosition - 1); END_IF
 END_IF
 bExactNameEscaped := FALSE;
@@ -412,7 +574,7 @@ AssertTrue(Condition := fb.bValid AND fb.bPublishPending, Message := 'Maximum 64
 nLength := 0;
 FOR i := 0 TO SIZEOF(fb.sPayload) - 1 DO IF fb.sPayload[i] = 0 THEN nLength := i; EXIT; END_IF END_FOR
 AssertTrue(Condition := nLength > 0 AND nLength < SIZEOF(fb.sPayload), Message := 'Maximum metadata output remains bounded and terminated');
-AssertTrue(Condition := FIND(fb.sPayload, '1234567890123456789012345678901234567890123456789012345678901234') > 0, Message := 'Maximum metadata content is present in output');
+AssertTrue(Condition := PayloadFind(sValue := fb.sPayload, sNeedle := '1234567890123456789012345678901234567890123456789012345678901234') > 0, Message := 'Maximum metadata content is present in output');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="InvalidCatalogsFailClosed" Id="{6a2bbfc2-e2db-4a07-97ca-014993c2442e}">
@@ -547,6 +709,32 @@ fbIdentity.Observe(sObservedTopic := sOldTopic, pObservedPayload := 0, nObserved
 AssertFalse(Condition := fbIdentity.bReady, Message := 'Exact empty observation retires known topic but cannot clear the permanent uncertainty fault');
 AssertTrue(Condition := fbIdentity.bCoverageFault AND fbIdentity.bCoverageRecoveryRequested, Message := 'Unobserved publish-attempt uncertainty remains latched after later cleanup');
 TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="PayloadFind" Id="{b4b25c82-227e-4c1c-b5b7-2ee1b48e776a}">
+      <Declaration><![CDATA[METHOD PRIVATE PayloadFind : DINT
+VAR_INPUT
+    sValue : STRING(2047);
+    sNeedle : STRING(255);
+END_VAR
+VAR
+    i : UDINT;
+    j : UDINT;
+    nValueLength : UDINT;
+    nNeedleLength : UDINT;
+    bMatch : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[PayloadFind := 0;
+nValueLength := SIZEOF(sValue); nNeedleLength := SIZEOF(sNeedle);
+FOR i := 0 TO SIZEOF(sValue) - 1 DO IF sValue[i] = 0 THEN nValueLength := i; EXIT; END_IF END_FOR
+FOR i := 0 TO SIZEOF(sNeedle) - 1 DO IF sNeedle[i] = 0 THEN nNeedleLength := i; EXIT; END_IF END_FOR
+IF (nValueLength >= SIZEOF(sValue)) OR (nNeedleLength = 0) OR (nNeedleLength >= SIZEOF(sNeedle)) OR (nNeedleLength > nValueLength) THEN RETURN; END_IF
+FOR i := 0 TO nValueLength - nNeedleLength DO
+    bMatch := TRUE;
+    FOR j := 0 TO nNeedleLength - 1 DO
+        IF sValue[i + j] <> sNeedle[j] THEN bMatch := FALSE; EXIT; END_IF
+    END_FOR
+    IF bMatch THEN PayloadFind := UDINT_TO_DINT(i + 1); RETURN; END_IF
+END_FOR]]></ST></Implementation>
     </Method>
     <Method Name="PayloadByteLength" Id="{2c20c417-794d-4983-96e0-4f114efeb42b}">
       <Declaration><![CDATA[METHOD PRIVATE PayloadByteLength : UDINT

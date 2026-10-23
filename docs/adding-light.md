@@ -4,7 +4,7 @@ Konfiguracja urządzeń jest w `S85.Core`. `FB_Home.aLights` to statyczna tablic
 
 ## Identyfikatory i katalog
 
-Lokalizacja ma format `Area.Code.Floor.Code-Location.Number`, z kodem piętra i numerem lokalizacji zapisanymi na dwóch cyfrach. Potwierdzone wartości to Workshop `H.01-09` i Entryway `H.01-01`, zgodnie z [dokumentacją domu](https://app.notion.com/p/c23e05ddd8c84e09a17cc938f241f1bd) oraz [rekordem Entryway](https://app.notion.com/p/b1520dc6bc7b429da33e74b833b5d88d). Lokalne id to `main` dla Workshop oraz `main` i `temporary` dla Entryway.
+Lokalizacja ma format `Area.Code.Floor.Code-Location.Number`, z kodem piętra i numerem lokalizacji zapisanymi na dwóch cyfrach. Potwierdzone wartości to Workshop `H.01-09`, Entryway `H.01-01` oraz Hall `H.01-02`. Hall odpowiada House H, Floor 1 i LocationNumber 2. Zobacz [dokumentację domu](https://app.notion.com/p/c23e05ddd8c84e09a17cc938f241f1bd), [rekord Entryway](https://app.notion.com/p/b1520dc6bc7b429da33e74b833b5d88d) oraz [rekord Hall](https://app.notion.com/p/4710f5a1fcd64f0abc083e8c376b1760). Lokalne id Workshop to `main`, Entryway to `main` i `temporary`, a Hall to `main`, `outer_spots` i `middle_spot`.
 
 Pola są `STRING(16)`. Zachowaj wartość mieszczącą się w 16 znakach i używaj krótkich semantycznych segmentów, np. małych liter, cyfr i podkreśleń (`main`, `temporary`, `wall_west`), bez lokalizacji ani pozycji w katalogu. W Core nie ma lookup po id: błędny id niczego nie wybiera i nie steruje światłem. Testy konfiguracji mają sprawdzać niepuste i unikalne pary, ale błąd katalogu nie blokuje lokalnego sterowania.
 
@@ -26,7 +26,7 @@ END_FOR
 
 Wspólne zachowanie przełączania przyciskiem i obsługi poleceń światła znajduje się w `S85.Core/Domains/Lighting/POUs/FB_ButtonLight.TcPOU`. Wykorzystaj je w adapterze lokalizacji, a `FB_Location_Workshop` pozostaw adapterem kontraktu Workshop.
 
-Dla kolejnego światła w istniejącym Entryway, z własnym przyciskiem i wyjściem, minimum to 8 plików kodu: `S85.Core/Locations/Entryway/POUs/FB_Location_Entryway.TcPOU`, `S85.Core/Locations/Entryway/DUTs/ST_EntrywayInputs.TcDUT`, `S85.Core/Locations/Entryway/DUTs/ST_EntrywayOutputs.TcDUT`, `S85.Core/Application/POUs/FB_Home.TcPOU`, dwa adaptery symulacji LOCAL, jeden GVL symulacji oraz test katalogu LOCAL. Obsługa PROD wymaga dodatkowo dwóch adapterów sprzętowych, jednego GVL i zatwierdzonego mapowania w `S85.PROD/S85.PROD.tsproj`: łącznie 12 plików dla obu środowisk. Nowe DUT/POU wymagają też wpisów w projekcie. Nie trzeba zmieniać `ST_HomeInputs` ani `ST_HomeOutputs`, jeśli nie dodajesz nowej lokalizacji ani nie zmieniasz ich pól - zawierają już struktury Entryway.
+Liczba wymaganych plików zależy od istniejących struktur i adapterów. Sprawdź aktualny kod, pliki projektu oraz testy przed określeniem zakresu zmiany. Dla nowego sygnału sprzętowego wymagane jest zatwierdzone mapowanie w `S85.PROD/S85.PROD.tsproj`. Nie zmieniaj sprzętu ani mapowań bez autoryzacji.
 
 1. Dodaj wejście i wyjście w `ST_EntrywayInputs`/`ST_EntrywayOutputs` tylko gdy są potrzebne. Zachowaj logiczny kontrakt niezależny od sprzętu.
 2. W `FB_Location_Entryway` dodaj instancję `FB_ButtonLight` i stałą nowego id, np. `cWallWestLightId := 'wall_west'`. Wykorzystaj istniejące `cLocationId`, nie definiuj lokalizacji ponownie. Wywołaj FB z wejściem przycisku i przypisz `bLightRelay` do nowego wyjścia. Następnie opublikuj `ST_LightInfo` z tymi id i stanem wyjścia.

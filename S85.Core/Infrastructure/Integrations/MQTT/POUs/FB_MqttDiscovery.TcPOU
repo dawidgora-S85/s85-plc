@@ -24,6 +24,7 @@ VAR_OUTPUT
     nOrphanOverflow : UDINT;
     nRejectedObservations : UDINT;
     sTopic : STRING(255);
+    {attribute 'TcEncoding' := 'UTF-8'}
     sPayload : STRING(2047);
 END_VAR
 VAR
@@ -137,20 +138,51 @@ StringsEqual := TRUE;]]></ST></Implementation>
     <Method Name="ValidateName" Id="{8f448107-e61b-43a4-a421-9aa4bd065851}">
       <Declaration><![CDATA[METHOD PRIVATE ValidateName : BOOL
 VAR_INPUT
+    {attribute 'TcEncoding' := 'UTF-8'}
     sName : STRING(64);
 END_VAR
 VAR
     i : UDINT;
     nLength : UDINT;
-    nCode : INT;
+    nCode : UDINT;
+    nSecond : UDINT;
+    nThird : UDINT;
+    nFourth : UDINT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[ValidateName := FALSE;
-nLength := INT_TO_UDINT(LEN(sName));
-IF (nLength = 0) OR (nLength > 64) THEN RETURN; END_IF
-FOR i := 0 TO nLength - 1 DO
-    nCode := BYTE_TO_INT(sName[i]);
-    IF (nCode < 32) OR (nCode > 126) THEN RETURN; END_IF
+nLength := SIZEOF(sName);
+FOR i := 0 TO SIZEOF(sName) - 1 DO
+    IF sName[i] = 0 THEN nLength := i; EXIT; END_IF
 END_FOR
+IF (nLength = 0) OR (nLength > 64) OR (nLength >= SIZEOF(sName)) THEN RETURN; END_IF
+i := 0;
+WHILE i < nLength DO
+    nCode := BYTE_TO_UDINT(sName[i]);
+    IF nCode < 128 THEN
+        IF (nCode < 32) OR (nCode = 127) THEN RETURN; END_IF
+        i := i + 1;
+    ELSIF (nCode >= 194) AND (nCode <= 223) THEN
+        IF i + 1 >= nLength THEN RETURN; END_IF
+        nSecond := BYTE_TO_UDINT(sName[i + 1]);
+        IF (nSecond < 128) OR (nSecond > 191) OR ((nCode = 194) AND (nSecond <= 159)) THEN RETURN; END_IF
+        i := i + 2;
+    ELSIF (nCode >= 224) AND (nCode <= 239) THEN
+        IF i + 2 >= nLength THEN RETURN; END_IF
+        nSecond := BYTE_TO_UDINT(sName[i + 1]); nThird := BYTE_TO_UDINT(sName[i + 2]);
+        IF (nSecond < 128) OR (nSecond > 191) OR (nThird < 128) OR (nThird > 191) THEN RETURN; END_IF
+        IF (nCode = 224) AND (nSecond < 160) THEN RETURN; END_IF
+        IF (nCode = 237) AND (nSecond > 159) THEN RETURN; END_IF
+        i := i + 3;
+    ELSIF (nCode >= 240) AND (nCode <= 244) THEN
+        IF i + 3 >= nLength THEN RETURN; END_IF
+        nSecond := BYTE_TO_UDINT(sName[i + 1]); nThird := BYTE_TO_UDINT(sName[i + 2]); nFourth := BYTE_TO_UDINT(sName[i + 3]);
+        IF (nSecond < 128) OR (nSecond > 191) OR (nThird < 128) OR (nThird > 191) OR (nFourth < 128) OR (nFourth > 191) THEN RETURN; END_IF
+        IF (nCode = 240) AND (nSecond < 144) THEN RETURN; END_IF
+        IF (nCode = 244) AND (nSecond > 143) THEN RETURN; END_IF
+        i := i + 4;
+    ELSE RETURN;
+    END_IF
+END_WHILE
 ValidateName := TRUE;]]></ST></Implementation>
     </Method>
     <Method Name="Append" Id="{57fa6051-570e-4057-8ec8-077c9c6cba6d}">
@@ -183,22 +215,26 @@ VAR_IN_OUT
     sTarget : STRING(2047);
 END_VAR
 VAR_INPUT
-    sName : STRING(129);
+    {attribute 'TcEncoding' := 'UTF-8'}
+    sName : STRING(137);
 END_VAR
 VAR
     i : UDINT;
     nLength : UDINT;
-    nCode : INT;
+    nCode : UDINT;
     sCharacter : STRING(2);
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[AppendName := FALSE;
-nLength := INT_TO_UDINT(LEN(sName));
+nLength := SIZEOF(sName);
+FOR i := 0 TO SIZEOF(sName) - 1 DO
+    IF sName[i] = 0 THEN nLength := i; EXIT; END_IF
+END_FOR
 IF nLength >= SIZEOF(sName) THEN RETURN; END_IF
 IF NOT Append(sTarget := sTarget, sFragment := '"') THEN RETURN; END_IF
 IF nLength > 0 THEN
     FOR i := 0 TO nLength - 1 DO
-        nCode := BYTE_TO_INT(sName[i]);
-        IF (nCode < 32) OR (nCode > 126) THEN RETURN; END_IF
+        nCode := BYTE_TO_UDINT(sName[i]);
+        IF (nCode < 32) OR (nCode = 127) THEN RETURN; END_IF
         IF nCode = 34 THEN
             IF NOT Append(sTarget := sTarget, sFragment := '$5C') THEN RETURN; END_IF
             IF NOT Append(sTarget := sTarget, sFragment := '"') THEN RETURN; END_IF
@@ -224,7 +260,12 @@ VAR
     sIdentity : STRING(128);
     sAvailability : STRING(255);
     sTopic : STRING(255);
-    sDeviceName : STRING(129);
+    {attribute 'TcEncoding' := 'UTF-8'}
+    sDeviceName : STRING(137);
+    {attribute 'TcEncoding' := 'UTF-8'}
+    sDeviceBuffer : STRING(2047);
+    iName : UDINT;
+    nDeviceLength : UDINT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[BuildPayload := FALSE;
 sPayload := '';
@@ -232,12 +273,26 @@ sIdentity := fbTopicMap.BuildIdentity(bTestNamespace := bTestNamespace, sLocatio
 IF LEN(sIdentity) = 0 THEN RETURN; END_IF
 IF NOT ValidateName(sName := stLight.sLocationName) OR NOT ValidateName(sName := stLight.sName) THEN RETURN; END_IF
 sAvailability := fbTopicMap.BuildAvailabilityTopic(bTestNamespace := bTestNamespace);
-sDeviceName := CONCAT(stLight.sLocationName, ' ');
-sDeviceName := CONCAT(sDeviceName, stLight.sName);
+sDeviceBuffer := '';
+IF bTestNamespace THEN
+    IF NOT Append(sTarget := sDeviceBuffer, sFragment := 'TEST: ') THEN RETURN; END_IF
+END_IF
+IF NOT Append(sTarget := sDeviceBuffer, sFragment := stLight.sLocationName) THEN RETURN; END_IF
+IF NOT Append(sTarget := sDeviceBuffer, sFragment := ' - ') THEN RETURN; END_IF
+IF NOT Append(sTarget := sDeviceBuffer, sFragment := stLight.sName) THEN RETURN; END_IF
+nDeviceLength := SIZEOF(sDeviceBuffer);
+FOR iName := 0 TO SIZEOF(sDeviceBuffer) - 1 DO
+    IF sDeviceBuffer[iName] = 0 THEN nDeviceLength := iName; EXIT; END_IF
+END_FOR
+IF (nDeviceLength > 137) OR (nDeviceLength >= SIZEOF(sDeviceBuffer)) THEN RETURN; END_IF
+sDeviceName := '';
+FOR iName := 0 TO nDeviceLength - 1 DO sDeviceName[iName] := sDeviceBuffer[iName]; END_FOR
+sDeviceName[nDeviceLength] := 0;
 IF NOT Append(sTarget := sPayload, sFragment := '{"dev":{"ids":["') THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := sIdentity) THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := '"],"name":') THEN RETURN; END_IF
 IF NOT AppendName(sTarget := sPayload, sName := sDeviceName) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := ',"mf":"S85","mdl":"PLC Light"') THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := '},"o":{"name":"S85","sw":"1"},"availability":[{"topic":"') THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := sAvailability) THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := '"}],"cmps":{"light":{"p":"light","unique_id":"') THEN RETURN; END_IF

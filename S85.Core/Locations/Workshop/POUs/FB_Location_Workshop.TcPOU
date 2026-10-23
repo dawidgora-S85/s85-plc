@@ -14,9 +14,11 @@ END_VAR
 
 VAR CONSTANT
     cLocationId : STRING(16) := 'H.01-09';
-    cLocationName : STRING(64) := 'Workshop';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cLocationName : STRING(64) := UTF8#'Warsztat';
     cMainLightId : STRING(16) := 'main';
-    cMainLightName : STRING(64) := 'Ceiling';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cMainLightName : STRING(64) := UTF8#'Oświetlenie główne';
 END_VAR
 
 VAR

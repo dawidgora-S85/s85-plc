@@ -47,7 +47,7 @@ IF bHomeInitialized THEN
         stConfig := stMqttConfig,
         bConfigurationReady := fbMqttConfigLoader.bReady,
         bCatalogReady := fbHome.bCatalogReady,
-        nLightCount := 3
+        nLightCount := fbHome.nLightCount
     );
     stLightCommand := fbMqttIntegration.PopCommand();
 ELSE
@@ -71,7 +71,7 @@ fbSimulationOutputs(
 );
 
 IF bHomeInitialized THEN
-    fbMqttIntegration.PublishCycle(aLights := fbHome.aLights, bCatalogReady := fbHome.bCatalogReady, nLightCount := 3);
+    fbMqttIntegration.PublishCycle(aLights := fbHome.aLights, bCatalogReady := fbHome.bCatalogReady, nLightCount := fbHome.nLightCount);
 END_IF
 
 bMqttReady := fbMqttIntegration.bReady;

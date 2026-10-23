@@ -10,17 +10,18 @@ RejectMalformedAndUnknownMessages();
 BuildTopicsAndAcceptDuplicateSets();
 SnapshotAndRetryUseCurrentState();
 FifoWraparoundPreservesRoutesAndTargets();
-OversizedInventoryIsRejectedSafely();]]></ST></Implementation>
+OversizedInventoryIsRejectedSafely();
+HallSetTopicsRouteAllCatalogCommands();]]></ST></Implementation>
     <Method Name="FifoCapacityOrderOverflow" Id="{79d4acd2-a872-4f85-889d-3e8c608aa069}">
       <Declaration><![CDATA[METHOD PRIVATE FifoCapacityOrderOverflow
 VAR
     fbProtocol : FB_MqttLightProtocol;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
     stCommand : ST_LightCommand;
     i : INT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('FIFO accepts sixteen commands in order and rejects newest on overflow');
-aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+InitializeCatalog(aLights := aLights);
 fbProtocol.SetConnection(bNewReady := TRUE);
 FOR i := 1 TO 16 DO
     IF fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights) THEN
@@ -43,11 +44,11 @@ TEST_FINISHED();]]></ST></Implementation>
       <Declaration><![CDATA[METHOD PRIVATE ResetAndReconnectDoNotReplay
 VAR
     fbProtocol : FB_MqttLightProtocol;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
     stCommand : ST_LightCommand;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('Disconnect and reset clear queued commands without replay');
-aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+InitializeCatalog(aLights := aLights);
 fbProtocol.SetConnection(bNewReady := TRUE);
 fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights);
 fbProtocol.SetConnection(bNewReady := FALSE);
@@ -68,10 +69,10 @@ TEST_FINISHED();]]></ST></Implementation>
       <Declaration><![CDATA[METHOD PRIVATE RejectMalformedAndUnknownMessages
 VAR
     fbProtocol : FB_MqttLightProtocol;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('Unknown topics and malformed payloads including TOGGLE and truncation are rejected');
-aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+InitializeCatalog(aLights := aLights);
 fbProtocol.SetConnection(bNewReady := TRUE);
 AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/unknown/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Unknown light topic rejected');
 AssertFalse(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'TOGGLE', nPayloadSize := 6, aLights := aLights), Message := 'TOGGLE rejected');
@@ -86,12 +87,10 @@ TEST_FINISHED();]]></ST></Implementation>
       <Declaration><![CDATA[METHOD PRIVATE BuildTopicsAndAcceptDuplicateSets
 VAR
     fbProtocol : FB_MqttLightProtocol;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
 END_VAR]]></Declaration>
-      <Implementation><ST><![CDATA[TEST('Topics use all three semantic IDs and duplicate absolute SET messages are accepted');
-aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
-aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main';
-aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary';
+      <Implementation><ST><![CDATA[TEST('Six-light inventory topics and duplicate absolute SET messages are accepted');
+InitializeCatalog(aLights := aLights);
 fbProtocol.SetConnection(bNewReady := TRUE);
 AssertTrue(Condition := fbProtocol.BuildTopic(sLocationId := aLights[1].sLocationId, sLightId := aLights[1].sId, sSuffix := 'set') = 's85/locations/H.01-09/lights/main/set', Message := 'Workshop topic built from inventory');
 AssertTrue(Condition := fbProtocol.BuildTopic(sLocationId := aLights[2].sLocationId, sLightId := aLights[2].sId, sSuffix := 'set') = 's85/locations/H.01-01/lights/main/set', Message := 'Entryway topic built from inventory');
@@ -105,16 +104,17 @@ TEST_FINISHED();]]></ST></Implementation>
       <Declaration><![CDATA[METHOD PRIVATE SnapshotAndRetryUseCurrentState
 VAR
     fbProtocol : FB_MqttLightProtocol;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
     nPublished : INT;
 END_VAR]]></Declaration>
-      <Implementation><ST><![CDATA[TEST('Reconnect snapshots all lights and failed state publication replans current state');
-aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main'; aLights[1].bOn := FALSE;
-aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main'; aLights[2].bOn := TRUE;
-aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary'; aLights[3].bOn := FALSE;
+      <Implementation><ST><![CDATA[TEST('Reconnect snapshots all six lights and failed state publication replans current state');
+InitializeCatalog(aLights := aLights);
+aLights[1].bOn := FALSE;
+aLights[2].bOn := TRUE;
+aLights[3].bOn := FALSE;
 fbProtocol.SetConnection(bNewReady := TRUE);
 nPublished := 0;
-WHILE nPublished < 3 DO
+WHILE nPublished < 6 DO
     fbProtocol.PlanState(aLights := aLights);
     AssertTrue(Condition := fbProtocol.bPublishPending, Message := 'Reconnect snapshot has next light');
     AssertTrue(Condition := fbProtocol.sStateTopic = fbProtocol.BuildTopic(sLocationId := aLights[fbProtocol.nStateIndex].sLocationId, sLightId := aLights[fbProtocol.nStateIndex].sId, sSuffix := 'state'), Message := 'State topic matches inventory');
@@ -122,7 +122,7 @@ WHILE nPublished < 3 DO
     nPublished := nPublished + 1;
 END_WHILE
 fbProtocol.PlanState(aLights := aLights);
-AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'All three current states have been acknowledged');
+AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'All six current states have been acknowledged');
 
 aLights[1].bOn := TRUE;
 fbProtocol.PlanState(aLights := aLights);
@@ -154,24 +154,25 @@ TEST_FINISHED();]]></ST></Implementation>
       <Declaration><![CDATA[METHOD PRIVATE FifoWraparoundPreservesRoutesAndTargets
 VAR
     fbProtocol : FB_MqttLightProtocol;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
     aExpected : ARRAY[1..21] OF ST_LightCommand;
     stCommand : ST_LightCommand;
     i : INT;
     nSequence : INT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('FIFO preserves alternating routes and targets through overflow and ring wraparound');
-aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
-aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main';
-aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary';
+InitializeCatalog(aLights := aLights);
 fbProtocol.SetConnection(bNewReady := TRUE);
 FOR i := 1 TO 16 DO
     nSequence := i;
     aExpected[i].bTargetOn := (nSequence MOD 2) = 1;
-    CASE (nSequence MOD 3) OF
+    CASE (nSequence MOD 6) OF
         1: aExpected[i].sLocationId := 'H.01-09'; aExpected[i].sLightId := 'main';
         2: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'main';
-        0: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'temporary';
+        3: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'temporary';
+        4: aExpected[i].sLocationId := 'H.01-02'; aExpected[i].sLightId := 'main';
+        5: aExpected[i].sLocationId := 'H.01-02'; aExpected[i].sLightId := 'outer_spots';
+        0: aExpected[i].sLocationId := 'H.01-02'; aExpected[i].sLightId := 'middle_spot';
     END_CASE
     IF aExpected[i].bTargetOn THEN
         AssertTrue(Condition := fbProtocol.Receive(sTopic := fbProtocol.BuildTopic(sLocationId := aExpected[i].sLocationId, sLightId := aExpected[i].sLightId, sSuffix := 'set'), sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'FIFO accepts ON command');
@@ -187,10 +188,13 @@ END_FOR
 FOR i := 17 TO 21 DO
     nSequence := i;
     aExpected[i].bTargetOn := (nSequence MOD 2) = 1;
-    CASE (nSequence MOD 3) OF
+    CASE (nSequence MOD 6) OF
         1: aExpected[i].sLocationId := 'H.01-09'; aExpected[i].sLightId := 'main';
         2: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'main';
-        0: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'temporary';
+        3: aExpected[i].sLocationId := 'H.01-01'; aExpected[i].sLightId := 'temporary';
+        4: aExpected[i].sLocationId := 'H.01-02'; aExpected[i].sLightId := 'main';
+        5: aExpected[i].sLocationId := 'H.01-02'; aExpected[i].sLightId := 'outer_spots';
+        0: aExpected[i].sLocationId := 'H.01-02'; aExpected[i].sLightId := 'middle_spot';
     END_CASE
     IF aExpected[i].bTargetOn THEN
         AssertTrue(Condition := fbProtocol.Receive(sTopic := fbProtocol.BuildTopic(sLocationId := aExpected[i].sLocationId, sLightId := aExpected[i].sLightId, sSuffix := 'set'), sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Wrapped FIFO accepts ON command');
@@ -220,6 +224,39 @@ AssertTrue(Condition := fbProtocol.nCount = 0, Message := 'Oversized inventory d
 fbProtocol.PlanState(aLights := aLights);
 AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'Oversized inventory produces no unsafe state index');
 TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="HallSetTopicsRouteAllCatalogCommands" Id="{bd004fa5-28d8-4d37-b2f0-f675a9ba018d}">
+      <Declaration><![CDATA[METHOD PRIVATE HallSetTopicsRouteAllCatalogCommands
+VAR
+    fbProtocol : FB_MqttLightProtocol;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Hall group and member SET topics route to all six-light inventory');
+InitializeCatalog(aLights := aLights);
+fbProtocol.SetConnection(bNewReady := TRUE);
+AssertTrue(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-02/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Hall group SET topic accepted');
+AssertTrue(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-02/lights/outer_spots/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Hall outer spot SET topic accepted');
+AssertTrue(Condition := fbProtocol.Receive(sTopic := 's85/locations/H.01-02/lights/middle_spot/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Hall middle spot SET topic accepted');
+stCommand := fbProtocol.Pop();
+AssertTrue(Condition := stCommand.bValid AND stCommand.sLocationId = 'H.01-02' AND stCommand.sLightId = 'main' AND stCommand.bTargetOn, Message := 'Hall group topic resolves to group command');
+stCommand := fbProtocol.Pop();
+AssertTrue(Condition := stCommand.bValid AND stCommand.sLocationId = 'H.01-02' AND stCommand.sLightId = 'outer_spots' AND NOT stCommand.bTargetOn, Message := 'Hall outer topic resolves to outer member command');
+stCommand := fbProtocol.Pop();
+AssertTrue(Condition := stCommand.bValid AND stCommand.sLocationId = 'H.01-02' AND stCommand.sLightId = 'middle_spot' AND stCommand.bTargetOn, Message := 'Hall middle topic resolves to middle member command');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="InitializeCatalog" Id="{c5e83964-e925-49dc-83c4-2a6248042fe0}">
+      <Declaration><![CDATA[METHOD PRIVATE InitializeCatalog
+VAR_IN_OUT
+    aLights : ARRAY[1..6] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+aLights[2].sLocationId := 'H.01-01'; aLights[2].sId := 'main';
+aLights[3].sLocationId := 'H.01-01'; aLights[3].sId := 'temporary';
+aLights[4].sLocationId := 'H.01-02'; aLights[4].sId := 'main';
+aLights[5].sLocationId := 'H.01-02'; aLights[5].sId := 'outer_spots';
+aLights[6].sLocationId := 'H.01-02'; aLights[6].sId := 'middle_spot';]]></ST></Implementation>
     </Method>
   </POU>
 </TcPlcObject>

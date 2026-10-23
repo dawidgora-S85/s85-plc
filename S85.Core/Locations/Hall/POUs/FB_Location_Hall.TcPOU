@@ -4,24 +4,84 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Hall
 VAR_INPUT
     stInputs : ST_HallInputs;
+    stCommand : ST_LightCommand;
 END_VAR
 
 VAR_OUTPUT
     stOutputs : ST_HallOutputs;
+    aLights : ARRAY[1..3] OF ST_LightInfo;
+END_VAR
+
+VAR CONSTANT
+    cLocationId : STRING(16) := 'H.01-02';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cLocationName : STRING(64) := UTF8#'Hol';
+    cGroupLightId : STRING(16) := 'main';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cGroupLightName : STRING(64) := UTF8#'Oświetlenie';
+    cOuterSpotsLightId : STRING(16) := 'outer_spots';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cOuterSpotsLightName : STRING(64) := UTF8#'Spoty zewnętrzne';
+    cMiddleSpotLightId : STRING(16) := 'middle_spot';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cMiddleSpotLightName : STRING(64) := UTF8#'Spot środkowy';
 END_VAR
 
 VAR
-    fbSpots : FB_ButtonLight;
+    fbOuterSpots : FB_Light;
+    fbMiddleSpot : FB_Light;
+    bUpperButtonArmed : BOOL;
+    bUpperButtonToggle : BOOL;
+    bTargetOn : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[fbSpots(
-    bButton := stInputs.bUpperButton,
-    bAdditionalButton := FALSE,
-    bSetValid := FALSE,
-    bTargetOn := FALSE,
-    bLightRelay => stOutputs.bOuterSpotsRelay
+      <ST><![CDATA[bUpperButtonToggle := FALSE;
+IF stInputs.bUpperButton THEN
+    IF bUpperButtonArmed THEN
+        bUpperButtonToggle := TRUE;
+    END_IF
+    bUpperButtonArmed := FALSE;
+ELSE
+    bUpperButtonArmed := TRUE;
+END_IF
+
+bTargetOn := stCommand.bTargetOn;
+IF bUpperButtonToggle THEN
+    bTargetOn := NOT (fbOuterSpots.bOn OR fbMiddleSpot.bOn);
+END_IF
+
+fbOuterSpots(
+    bToggle := FALSE,
+    bSetValid := bUpperButtonToggle OR
+        (stCommand.bValid AND (stCommand.sLocationId = cLocationId) AND
+        ((stCommand.sLightId = cGroupLightId) OR (stCommand.sLightId = cOuterSpotsLightId))),
+    bTargetOn := bTargetOn
 );
-stOutputs.bMiddleSpotRelay := stOutputs.bOuterSpotsRelay;]]></ST>
+fbMiddleSpot(
+    bToggle := FALSE,
+    bSetValid := bUpperButtonToggle OR
+        (stCommand.bValid AND (stCommand.sLocationId = cLocationId) AND
+        ((stCommand.sLightId = cGroupLightId) OR (stCommand.sLightId = cMiddleSpotLightId))),
+    bTargetOn := bTargetOn
+);
+stOutputs.bOuterSpotsRelay := fbOuterSpots.bOn;
+stOutputs.bMiddleSpotRelay := fbMiddleSpot.bOn;
+
+aLights[1].sLocationId := cLocationId;
+aLights[1].sLocationName := cLocationName;
+aLights[1].sId := cGroupLightId;
+aLights[1].sName := cGroupLightName;
+aLights[1].bOn := stOutputs.bOuterSpotsRelay OR stOutputs.bMiddleSpotRelay;
+aLights[2].sLocationId := cLocationId;
+aLights[2].sLocationName := cLocationName;
+aLights[2].sId := cOuterSpotsLightId;
+aLights[2].sName := cOuterSpotsLightName;
+aLights[2].bOn := stOutputs.bOuterSpotsRelay;
+aLights[3].sLocationId := cLocationId;
+aLights[3].sLocationName := cLocationName;
+aLights[3].sId := cMiddleSpotLightId;
+aLights[3].sName := cMiddleSpotLightName;
+aLights[3].bOn := stOutputs.bMiddleSpotRelay;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

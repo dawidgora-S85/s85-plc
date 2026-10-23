@@ -79,16 +79,15 @@ LOCAL `MAIN` reads these simulation inputs and writes these simulation outputs:
 - `GVL_HallSimulation.bMiddleSpotRelay`
 
 `PlcTask` calls `MAIN` and `PRG_Tests`; `PRG_Tests` calls `TcUnit.RUN()`.
-The test suites are `fbButtonTests`, `fbLightTests`, `fbWorkshopTests`, `fbHomeTests`, `fbLightCatalogTests`, `fbLocalIntegrationTests`, `fbLightCommandTests`, `fbMqttLightProtocolTests`, `fbMqttConfigParserTests` and `fbMqttIntegrationQueueTests`.
+The test suites are `fbButtonTests`, `fbLightTests`, `fbWorkshopTests`, `fbHomeTests`, `fbLightCatalogTests`, `fbLocalIntegrationTests`, `fbLightCommandTests`, `fbMqttLightProtocolTests`, `fbMqttConfigParserTests`, `fbMqttIntegrationQueueTests` and `fbMqttDiscoveryTests`.
 Run them only in the authorized LOCAL PLC session.
-The current source defines 36 tests in ten suites: Button 5, Light 4, Workshop 1, Home 2, LightCatalog 1, LocalIntegration 4, LightCommand 5, MqttLightProtocol 7, MqttConfigParser 4 and MqttIntegrationQueue 3. These are source counts, not execution results.
-The Hall controls are not in the MQTT light catalog because no light ID was supplied.
+Inspect the current source and runtime test inventory before checking suite names or counts. Source inventory is not an execution result.
 See [MQTT light integration](mqtt-light.md) for broker configuration, topics and commissioning checks.
 
 A Watch List is not required to check the results.
 After separate authorization for LOCAL online reads, use the XAE PLC Symbol Browser or an approved ADS symbol reader.
 Expand `PRG_Tests`, then each suite instance and its `Tests` array.
-Confirm the expected test counts: Button 5, Light 4, Workshop 1, Home 2, LightCatalog 1, LocalIntegration 4, LightCommand 5, MqttLightProtocol 7, MqttConfigParser 4 and MqttIntegrationQueue 3.
+Inspect the current source and runtime inventory to determine the expected suites and counts.
 Zero or missing tests are not a pass.
 Read `NumberOfTests` and inspect indices `1` through that count.
 Each active test must have `TestIsFinished=TRUE`, `TestIsFailed=FALSE` and `TestIsSkipped=FALSE`.
@@ -145,7 +144,7 @@ The application ignores each button already reading TRUE until that button is re
 The Entryway lower button and Hall lower button toggle the Entryway main light relay; simultaneous new presses cause one toggle.
 If both are newly pressed in the same scan, they cause one toggle.
 The Entryway upper button toggles the temporary light relay.
-The Hall upper button toggles both spot relays together.
+The Hall upper button turns both spot relays OFF if either is ON. Otherwise, it turns both ON.
 The Workshop button toggles its own light relay.
 Holding or releasing a button does not toggle a relay.
 

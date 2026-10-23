@@ -4,7 +4,7 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Entryway
 VAR_INPUT
     stInputs : ST_EntrywayInputs;
-    bAdditionalLowerButton : BOOL;
+    bHallLowerButton : BOOL;
     stCommand : ST_LightCommand;
 END_VAR
 
@@ -15,11 +15,14 @@ END_VAR
 
 VAR CONSTANT
     cLocationId : STRING(16) := 'H.01-01';
-    cLocationName : STRING(64) := 'Entryway';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cLocationName : STRING(64) := UTF8#'Wiatrołap';
     cMainLightId : STRING(16) := 'main';
-    cMainLightName : STRING(64) := 'Main light';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cMainLightName : STRING(64) := UTF8#'Oświetlenie główne';
     cTemporaryLightId : STRING(16) := 'temporary';
-    cTemporaryLightName : STRING(64) := 'Temporary light';
+    {attribute 'TcEncoding' := 'UTF-8'}
+    cTemporaryLightName : STRING(64) := UTF8#'Oświetlenie tymczasowe';
 END_VAR
 
 VAR
@@ -29,7 +32,7 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbLowerLight(
     bButton := stInputs.bLowerButton,
-    bAdditionalButton := bAdditionalLowerButton,
+    bAdditionalButton := bHallLowerButton,
     bSetValid := stCommand.bValid AND (stCommand.sLocationId = cLocationId) AND (stCommand.sLightId = cMainLightId),
     bTargetOn := stCommand.bTargetOn,
     bLightRelay => stOutputs.bLightRelay

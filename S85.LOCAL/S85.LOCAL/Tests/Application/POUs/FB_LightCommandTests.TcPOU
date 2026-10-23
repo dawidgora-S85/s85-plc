@@ -6,6 +6,8 @@ VAR
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[AllThreeRoutesAreAbsoluteAndIndependent();
+HallToggleCoversEveryMemberCombination();
+HallUpperToggleWinsOverEverySet();
 InvalidCommandsDoNothing();
 DuplicateSetIsIdempotent();
 PhysicalPressWinsOverSet();
@@ -19,7 +21,7 @@ VAR
     stOutputs : ST_HomeOutputs;
     stCommand : ST_LightCommand;
 END_VAR]]></Declaration>
-      <Implementation><ST><![CDATA[TEST('Absolute commands route ON and OFF independently to all three semantic light IDs');
+      <Implementation><ST><![CDATA[TEST('Absolute commands route ON and OFF independently across the six-light catalog');
 
 stCommand.bValid := TRUE;
 stCommand.sLocationId := 'H.01-09';
@@ -47,6 +49,40 @@ AssertTrue(Condition := NOT fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn 
 stCommand.bTargetOn := FALSE;
 fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
 AssertTrue(Condition := NOT fbHome.aLights[3].bOn, Message := 'Entryway temporary OFF is absolute');
+
+stCommand.sLocationId := 'H.01-02';
+stCommand.sLightId := 'outer_spots';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[5].bOn AND NOT fbHome.aLights[6].bOn AND fbHome.aLights[4].bOn, Message := 'Hall outer spot ON is independent and group derives ON');
+stCommand.sLightId := 'middle_spot';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stCommand.sLightId := 'outer_spots';
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[5].bOn AND fbHome.aLights[6].bOn AND fbHome.aLights[4].bOn, Message := 'Outer spot OFF leaves middle spot and group ON');
+stCommand.sLightId := 'outer_spots';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[5].bOn AND fbHome.aLights[6].bOn AND fbHome.aLights[4].bOn, Message := 'Outer spot ON leaves middle spot on');
+stCommand.sLightId := 'middle_spot';
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[5].bOn AND NOT fbHome.aLights[6].bOn AND fbHome.aLights[4].bOn, Message := 'Middle spot OFF leaves outer spot and group ON');
+stCommand.sLightId := 'outer_spots';
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[6].bOn AND NOT fbHome.aLights[5].bOn AND NOT fbHome.aLights[4].bOn, Message := 'Last member OFF clears derived group');
+stCommand.sLightId := 'main';
+stCommand.bTargetOn := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[5].bOn AND fbHome.aLights[6].bOn AND fbHome.aLights[4].bOn, Message := 'Duplicate Hall group ON remains absolute');
+stCommand.bTargetOn := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[5].bOn AND NOT fbHome.aLights[6].bOn AND NOT fbHome.aLights[4].bOn, Message := 'Duplicate Hall group OFF remains absolute');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="InvalidCommandsDoNothing" Id="{bf28a4fb-c9b3-40a1-a8b0-1a794e8bb96c}">
@@ -162,6 +198,105 @@ stCommand.bValid := FALSE;
 stCommand.bTargetOn := FALSE;
 fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
 AssertTrue(Condition := fbHome.aLights[1].bOn, Message := 'Invalid command does not reapply stale OFF target');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="HallToggleCoversEveryMemberCombination" Id="{d4937fa2-a705-4e90-8f5e-801d1c6504c3}">
+      <Declaration><![CDATA[METHOD PRIVATE HallToggleCoversEveryMemberCombination
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+    nMask : INT;
+    bOuterInitial : BOOL;
+    bMiddleInitial : BOOL;
+    bExpected : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Hall upper toggles both members from all four pre-scan combinations and arms after release');
+
+stInputs.Hall.bUpperButton := TRUE;
+stCommand.bValid := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := NOT fbHome.aLights[5].bOn AND NOT fbHome.aLights[6].bOn, Message := 'Startup-high Hall upper remains suppressed while held');
+stInputs.Hall.bUpperButton := FALSE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+stInputs.Hall.bUpperButton := TRUE;
+fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+AssertTrue(Condition := fbHome.aLights[5].bOn AND fbHome.aLights[6].bOn, Message := 'Hall upper toggles both after startup-high release and new press');
+
+FOR nMask := 0 TO 3 DO
+    stCommand.bValid := TRUE;
+    stCommand.sLocationId := 'H.01-02';
+    stCommand.sLightId := 'outer_spots';
+    bOuterInitial := (nMask MOD 2) = 1;
+    bMiddleInitial := nMask >= 2;
+    stCommand.bTargetOn := bOuterInitial;
+    fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+    stCommand.sLightId := 'middle_spot';
+    stCommand.bTargetOn := bMiddleInitial;
+    fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+
+    stCommand.bValid := FALSE;
+    stInputs.Hall.bUpperButton := FALSE;
+    fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+    bExpected := NOT (bOuterInitial OR bMiddleInitial);
+    stInputs.Hall.bUpperButton := TRUE;
+    fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+    AssertTrue(Condition := (fbHome.aLights[5].bOn = bExpected) AND (fbHome.aLights[6].bOn = bExpected), Message := 'Hall upper toggle sets both members from the pre-scan any-on state');
+    AssertTrue(Condition := fbHome.aLights[4].bOn = bExpected, Message := 'Hall group snapshot follows both members');
+    fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+    AssertTrue(Condition := (fbHome.aLights[5].bOn = bExpected) AND (fbHome.aLights[6].bOn = bExpected), Message := 'Held Hall upper does not toggle again');
+END_FOR
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="HallUpperToggleWinsOverEverySet" Id="{0f650d3c-4954-4a1e-a6ea-1c13081b9d72}">
+      <Declaration><![CDATA[METHOD PRIVATE HallUpperToggleWinsOverEverySet
+VAR
+    fbHome : FB_Home;
+    stInputs : ST_HomeInputs;
+    stOutputs : ST_HomeOutputs;
+    stCommand : ST_LightCommand;
+    nOuterInitial : INT;
+    nMiddleInitial : INT;
+    nRoute : INT;
+    nTarget : INT;
+    bExpected : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Hall upper physical toggle has priority over simultaneous group and member SET commands');
+
+FOR nOuterInitial := 0 TO 1 DO
+    FOR nMiddleInitial := 0 TO 1 DO
+        FOR nRoute := 1 TO 3 DO
+            FOR nTarget := 0 TO 1 DO
+                stCommand.bValid := TRUE;
+                stCommand.sLocationId := 'H.01-02';
+                stCommand.sLightId := 'outer_spots';
+                stCommand.bTargetOn := nOuterInitial = 1;
+                fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+                stCommand.sLightId := 'middle_spot';
+                stCommand.bTargetOn := nMiddleInitial = 1;
+                fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+
+                stInputs.Hall.bUpperButton := FALSE;
+                stCommand.bValid := FALSE;
+                fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+
+                CASE nRoute OF
+                    1: stCommand.sLightId := 'main';
+                    2: stCommand.sLightId := 'outer_spots';
+                    3: stCommand.sLightId := 'middle_spot';
+                END_CASE
+                stCommand.bValid := TRUE;
+                stCommand.bTargetOn := nTarget = 1;
+                stInputs.Hall.bUpperButton := TRUE;
+                fbHome(stInputs := stInputs, stCommand := stCommand, stOutputs => stOutputs);
+                bExpected := NOT ((nOuterInitial = 1) OR (nMiddleInitial = 1));
+                AssertTrue(Condition := (fbHome.aLights[5].bOn = bExpected) AND (fbHome.aLights[6].bOn = bExpected), Message := 'Physical toggle wins over same-scan SET for group or either member');
+            END_FOR
+        END_FOR
+    END_FOR
+END_FOR
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
   </POU>

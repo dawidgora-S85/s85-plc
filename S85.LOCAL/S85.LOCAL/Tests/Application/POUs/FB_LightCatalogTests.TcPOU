@@ -23,12 +23,13 @@ END_VAR]]></Declaration>
         <ST><![CDATA[TEST('Light catalog identities are unique and snapshots track light outputs');
 
 nFirstIndex := 1;
-nLightCount := SIZEOF(fbHome.aLights) / SIZEOF(fbHome.aLights[1]);
-nLastIndex := nFirstIndex + nLightCount - 1;
 stInputs.Workshop.bButton := TRUE;
 stInputs.Entryway.bLowerButton := TRUE;
 stInputs.Entryway.bUpperButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
+nLightCount := fbHome.nLightCount;
+nLastIndex := nFirstIndex + nLightCount - 1;
+AssertTrue(Condition := fbHome.nLightCount = (UPPER_BOUND(fbHome.aLights, 1) - LOWER_BOUND(fbHome.aLights, 1) + 1), Message := 'Reported catalog count matches the light array bounds');
 
 FOR nIndex := nFirstIndex TO nLastIndex DO
     AssertTrue(Condition := fbHome.aLights[nIndex].sLocationId <> '', Message := 'Catalog location id is not empty');
@@ -42,6 +43,10 @@ END_FOR
 AssertTrue(Condition := fbHome.aLights[1].sLocationId = 'H.01-09' AND fbHome.aLights[1].sId = 'main', Message := 'Workshop identity is configured');
 AssertTrue(Condition := fbHome.aLights[2].sLocationId = 'H.01-01' AND fbHome.aLights[2].sId = 'main', Message := 'Entryway identity is configured');
 AssertTrue(Condition := fbHome.aLights[3].sLocationId = 'H.01-01' AND fbHome.aLights[3].sId = 'temporary', Message := 'Temporary identity is configured');
+AssertTrue(Condition := fbHome.nLightCount = 6 AND fbHome.bCatalogReady, Message := 'Catalog reports six ready lights');
+AssertTrue(Condition := fbHome.aLights[4].sLocationId = 'H.01-02' AND fbHome.aLights[4].sId = 'main', Message := 'Hall group identity is configured');
+AssertTrue(Condition := fbHome.aLights[5].sLocationId = 'H.01-02' AND fbHome.aLights[5].sId = 'outer_spots', Message := 'Hall outer spots identity is configured');
+AssertTrue(Condition := fbHome.aLights[6].sLocationId = 'H.01-02' AND fbHome.aLights[6].sId = 'middle_spot', Message := 'Hall middle spot identity is configured');
 
 stInputs.Workshop.bButton := FALSE;
 stInputs.Entryway.bLowerButton := FALSE;
@@ -54,12 +59,16 @@ fbHome(stInputs := stInputs, stOutputs => stOutputs);
 AssertTrue(Condition := fbHome.aLights[1].bOn = stOutputs.Workshop.bLightRelay, Message := 'Workshop snapshot matches output in same scan');
 AssertTrue(Condition := fbHome.aLights[2].bOn = stOutputs.Entryway.bLightRelay, Message := 'Entryway snapshot matches output in same scan');
 AssertTrue(Condition := fbHome.aLights[3].bOn = stOutputs.Entryway.bTemporaryLightRelay, Message := 'Temporary snapshot matches output in same scan');
-AssertTrue(Condition := fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Press toggles all three lights on');
+AssertTrue(Condition := fbHome.aLights[4].bOn = (stOutputs.Hall.bOuterSpotsRelay OR stOutputs.Hall.bMiddleSpotRelay), Message := 'Hall group snapshot is derived from members');
+AssertTrue(Condition := fbHome.aLights[5].bOn = stOutputs.Hall.bOuterSpotsRelay, Message := 'Hall outer spots snapshot matches relay');
+AssertTrue(Condition := fbHome.aLights[6].bOn = stOutputs.Hall.bMiddleSpotRelay, Message := 'Hall middle spot snapshot matches relay');
+AssertTrue(Condition := fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Workshop and Entryway presses turn their lights on');
 AssertTrue(Condition := fbHome.aLights[1].sLocationId = 'H.01-09' AND fbHome.aLights[1].sId = 'main', Message := 'Workshop identity survives toggle');
 AssertTrue(Condition := fbHome.aLights[2].sLocationId = 'H.01-01' AND fbHome.aLights[2].sId = 'main', Message := 'Entryway identity survives toggle');
 AssertTrue(Condition := fbHome.aLights[3].sLocationId = 'H.01-01' AND fbHome.aLights[3].sId = 'temporary', Message := 'Temporary identity survives toggle');
+AssertTrue(Condition := fbHome.aLights[4].sLocationId = 'H.01-02' AND fbHome.aLights[4].sId = 'main', Message := 'Hall group identity survives toggle');
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
-AssertTrue(Condition := fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Held buttons do not toggle again');
+AssertTrue(Condition := fbHome.aLights[1].bOn AND fbHome.aLights[2].bOn AND fbHome.aLights[3].bOn, Message := 'Held Workshop and Entryway buttons do not toggle again');
 
 stInputs.Workshop.bButton := FALSE;
 stInputs.Entryway.bLowerButton := FALSE;
@@ -69,10 +78,11 @@ stInputs.Workshop.bButton := TRUE;
 stInputs.Entryway.bLowerButton := TRUE;
 stInputs.Entryway.bUpperButton := TRUE;
 fbHome(stInputs := stInputs, stOutputs => stOutputs);
-AssertTrue(Condition := NOT fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Second press toggles all three lights off');
+AssertTrue(Condition := NOT fbHome.aLights[1].bOn AND NOT fbHome.aLights[2].bOn AND NOT fbHome.aLights[3].bOn, Message := 'Second Workshop and Entryway presses toggle their lights off');
 AssertTrue(Condition := fbHome.aLights[1].bOn = stOutputs.Workshop.bLightRelay, Message := 'Workshop OFF snapshot matches output in same scan');
 AssertTrue(Condition := fbHome.aLights[2].bOn = stOutputs.Entryway.bLightRelay, Message := 'Entryway OFF snapshot matches output in same scan');
 AssertTrue(Condition := fbHome.aLights[3].bOn = stOutputs.Entryway.bTemporaryLightRelay, Message := 'Temporary OFF snapshot matches output in same scan');
+AssertTrue(Condition := NOT fbHome.aLights[4].bOn AND NOT fbHome.aLights[5].bOn AND NOT fbHome.aLights[6].bOn, Message := 'Hall catalog remains off until Hall upper is pressed');
 
 TEST_FINISHED();]]></ST>
       </Implementation>

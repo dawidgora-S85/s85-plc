@@ -10,9 +10,9 @@ END_VAR
 
 VAR_OUTPUT
 	stOutputs : ST_HomeOutputs;
-    aLights : ARRAY[1..3] OF ST_LightInfo;
+    aLights : ARRAY[1..6] OF ST_LightInfo;
     bCatalogReady : BOOL;
-    nLightCount : DINT := 3;
+    nLightCount : DINT := 0;
 END_VAR
 
 VAR
@@ -30,13 +30,14 @@ END_VAR
 
 fbEntryway(
     stInputs := stInputs.Entryway,
-    bAdditionalLowerButton := stInputs.Hall.bLowerButton,
+    bHallLowerButton := stInputs.Hall.bLowerButton,
     stCommand := stCommand,
     stOutputs => stOutputs.Entryway
 );
 
 fbHall(
     stInputs := stInputs.Hall,
+    stCommand := stCommand,
     stOutputs => stOutputs.Hall
 );
 
@@ -44,6 +45,9 @@ bCatalogReady := FALSE;
 aLights[1] := fbWorkshop.stLight;
 aLights[2] := fbEntryway.aLights[1];
 aLights[3] := fbEntryway.aLights[2];
+aLights[4] := fbHall.aLights[1];
+aLights[5] := fbHall.aLights[2];
+aLights[6] := fbHall.aLights[3];
 nLightCount := UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1;
 bCatalogReady := TRUE;]]></ST>
     </Implementation>
