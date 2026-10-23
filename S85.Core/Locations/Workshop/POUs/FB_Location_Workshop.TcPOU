@@ -14,7 +14,9 @@ END_VAR
 
 VAR CONSTANT
     cLocationId : STRING(16) := 'H.01-09';
+    cLocationName : STRING(64) := 'Workshop';
     cMainLightId : STRING(16) := 'main';
+    cMainLightName : STRING(64) := 'Main light';
 END_VAR
 
 VAR
@@ -30,7 +32,9 @@ END_VAR]]></Declaration>
 );
 
 stLight.sLocationId := cLocationId;
+stLight.sLocationName := cLocationName;
 stLight.sId := cMainLightId;
+stLight.sName := cMainLightName;
 stLight.bOn := stOutputs.bLightRelay;]]></ST>
     </Implementation>
   </POU>

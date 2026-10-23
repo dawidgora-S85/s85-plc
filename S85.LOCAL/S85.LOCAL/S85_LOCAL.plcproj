@@ -66,6 +66,9 @@
     <Compile Include="Tests\Application\POUs\FB_MqttIntegrationQueueTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Tests\Application\POUs\FB_MqttDiscoveryTests.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Tests\Application\POUs\FB_LocalIntegrationTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>

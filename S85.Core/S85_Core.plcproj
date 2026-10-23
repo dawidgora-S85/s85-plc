@@ -43,6 +43,12 @@
     <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttLightProtocol.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttTopicMap.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttDiscovery.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Infrastructure\Integrations\MQTT\POUs\FB_MqttIntegration.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -53,6 +59,12 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Infrastructure\Integrations\MQTT\DUTs\ST_MqttConfig.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\DUTs\E_MqttLifecyclePhase.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Infrastructure\Integrations\MQTT\DUTs\E_MqttObservedHaStatus.TcDUT">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Locations\Workshop\POUs\FB_Location_Workshop.TcPOU">

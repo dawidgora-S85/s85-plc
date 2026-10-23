@@ -1,3 +1,5 @@
+# DEPRECATED: PLC device discovery replaces this manual configuration.
+# Remove only after an approved backup and review of automations and entity references.
 mqtt:
   light:
     - name: Workshop Main

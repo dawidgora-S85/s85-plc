@@ -38,13 +38,16 @@ fbMqttConfigLoader.Cycle(
     sConfigFilePath := 'C:\ProgramData\S85\config\mqtt.conf',
     sSecretsFilePath := 'C:\ProgramData\S85\secrets\mqtt.conf'
 );
-fbMqttConfigLoader.GetConfig(stResult := stMqttConfig);
+    fbMqttConfigLoader.GetConfig(stResult := stMqttConfig);
+fbMqttIntegration(bTestNamespace := TRUE);
 
 IF bHomeInitialized THEN
     fbMqttIntegration.ReceiveCycle(
         aLights := fbHome.aLights,
         stConfig := stMqttConfig,
-        bConfigurationReady := fbMqttConfigLoader.bReady
+        bConfigurationReady := fbMqttConfigLoader.bReady,
+        bCatalogReady := fbHome.bCatalogReady,
+        nLightCount := fbHome.nLightCount
     );
     stLightCommand := fbMqttIntegration.PopCommand();
 ELSE
@@ -68,10 +71,10 @@ fbSimulationOutputs(
 );
 
 IF bHomeInitialized THEN
-    fbMqttIntegration.PublishCycle(aLights := fbHome.aLights);
+    fbMqttIntegration.PublishCycle(aLights := fbHome.aLights, bCatalogReady := fbHome.bCatalogReady, nLightCount := fbHome.nLightCount);
 END_IF
 
-bMqttReady := fbMqttIntegration.bConnected AND fbMqttIntegration.bSubscriptionsAccepted;
+bMqttReady := fbMqttIntegration.bReady;
 bMqttError := fbMqttConfigLoader.bError OR fbMqttIntegration.bError OR fbMqttIntegration.bConfigurationError;
 nMqttConfigError := fbMqttConfigLoader.nErrorCode;
 nMqttSystemError := fbMqttConfigLoader.nSystemErrorCode;

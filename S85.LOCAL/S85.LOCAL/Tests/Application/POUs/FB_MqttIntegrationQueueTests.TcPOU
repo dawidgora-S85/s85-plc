@@ -4,9 +4,24 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueTests EXTENDS TcUnit.FB_TestSuite
 VAR
 END_VAR]]></Declaration>
-    <Implementation><ST><![CDATA[EmptyQueueResetCanBeRepeated();
+    <Implementation><ST><![CDATA[// Probe fixtures persist and are guarded once per suite instance; use a fresh suite instance for each test run.
+EmptyQueueResetCanBeRepeated();
 ProductionQueueResetHelperCanBeRepeated();
-CopiedTransportBuffersAreValidatedBoundedly();]]></ST></Implementation>
+CopiedTransportBuffersAreValidatedBoundedly();
+BirthRefreshCoalescesOnlyWithinReadiness();
+AvailabilityOutcomesAreGenerationGuarded();
+BirthRefreshPreservesCommandFifo();
+NewConnectionResetsBirthObservation();
+BirthDiagnosticsCountValidEventsAndSaturate();
+BirthRefreshAbortionsDoNotCountCompletion();
+MetadataReconciliationUsesProductionHelper();
+OversizedIntegrationCatalogCountIsRejected();
+        CoverageFaultDoesNotScheduleRecovery();
+QueueCoverageLossFencesCommandsButAllowsDiscovery();
+ReceivedTopicValidationFailsClosed();
+OverflowLatchesAcrossCleanupAndReplay();
+ObservedRemovalAndReaddDoNotFault();
+BirthRefreshFaultsStillFence();]]></ST></Implementation>
     <Method Name="EmptyQueueResetCanBeRepeated" Id="{18d680fc-594f-4897-a31d-43221962500c}">
       <Declaration><![CDATA[METHOD PRIVATE EmptyQueueResetCanBeRepeated
 VAR
@@ -25,23 +40,27 @@ TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="ProductionQueueResetHelperCanBeRepeated" Id="{39d46cb4-cae3-433a-9a75-6f6a34b3479a}">
       <Declaration><![CDATA[METHOD PRIVATE ProductionQueueResetHelperCanBeRepeated
-VAR
+VAR_INST
     fbProbe : FB_MqttIntegrationQueueProbe;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('Production MQTT queue reset helper completes repeatedly for an empty queue');
+IF TcUnit.IS_TEST_FINISHED('Production MQTT queue reset helper completes repeatedly for an empty queue') THEN RETURN; END_IF
 AssertTrue(Condition := fbProbe.ResetQueueForTest(), Message := 'Production helper accepts empty queue after reset');
 AssertTrue(Condition := fbProbe.ResetQueueForTest(), Message := 'Production helper accepts repeated empty queue reset');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="CopiedTransportBuffersAreValidatedBoundedly" Id="{6f63e024-3771-4bc8-9cdc-6a2d7e76dc79}">
       <Declaration><![CDATA[METHOD PRIVATE CopiedTransportBuffersAreValidatedBoundedly
-VAR
+VAR_INST
     fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
     sTopic : STRING(255);
     sPayload : STRING(3);
     i : UDINT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('Copied MQTT transport buffers require bounded valid topic and payload bytes');
+IF TcUnit.IS_TEST_FINISHED('Copied MQTT transport buffers require bounded valid topic and payload bytes') THEN RETURN; END_IF
 sPayload := 'ON';
 sTopic := 's85/locations/H.01-09/lights/main/set';
 AssertTrue(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 37, bPayloadReceived := TRUE, nPayloadSize := 2, sTopic := sTopic, sPayload := sPayload), Message := 'Confirmed production topic with ON accepted');
@@ -97,6 +116,774 @@ END_FOR
 sTopic := 's85/topic';
 AssertFalse(Condition := fbProbe.ValidateCopiedMessageForTest(bTopicReceived := TRUE, nTopicSize := 9, bPayloadReceived := TRUE, nPayloadSize := 3, sTopic := sTopic, sPayload := sPayload), Message := 'Unterminated full payload buffer rejected');
 TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="BirthRefreshCoalescesOnlyWithinReadiness" Id="{74a2986d-3f1e-427e-b8c6-eae0528fe263}">
+      <Declaration><![CDATA[METHOD PRIVATE BirthRefreshCoalescesOnlyWithinReadiness
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    nGeneration : UDINT;
+    nPreviousGeneration : UDINT;
+    bSnapshotPending : BOOL;
+    sState : STRING(3);
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    bPlanAccepted : BOOL;
+    sDiscoveryTopic : STRING(255);
+    sDiscoveryPayload : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('HA births refresh only from Ready and coalesce through snapshot completion');
+IF TcUnit.IS_TEST_FINISHED('HA births refresh only from Ready and coalesce through snapshot completion') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+AssertTrue(Condition := fbProbe.EstablishReadyForBirthTest(aLights := aLights), Message := 'Fixture reaches Ready through actual discovery observation and availability outcome');
+nPreviousGeneration := fbProbe.nLifecycleGeneration;
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := nGeneration = nPreviousGeneration AND fbProbe.BirthRefreshActiveForTest(), Message := 'First unknown-to-online birth in established Ready starts refresh without generation churn');
+AssertTrue(Condition := fbProbe.bReady AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Discovery), Message := 'Refresh preserves command readiness and enters discovery phase');
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.BirthRefreshActiveForTest() AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Discovery), Message := 'Online burst during discovery coalesces');
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sDiscoveryTopic, sPayload => sDiscoveryPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanValid AND bPlanPending, Message := 'Replay planner requires fresh discovery publication');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sDiscoveryTopic, sPayload := sDiscoveryPayload, nPayloadSize := PayloadByteLength(sValue := sDiscoveryPayload));
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sDiscoveryTopic, sPayload => sDiscoveryPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanValid AND NOT bPlanPending AND fbProbe.DiscoveryReadyForTest(), Message := 'Fresh discovery publication and matching echo settle refresh discovery');
+bSnapshotPending := fbProbe.PlanCurrentStateForTest(aLights := aLights);
+AssertTrue(Condition := bSnapshotPending AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.StateSnapshot), Message := 'Actual protocol planner requests logical state snapshot');
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.BirthRefreshActiveForTest() AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.StateSnapshot), Message := 'Online burst during state snapshot coalesces without phase restart');
+AssertTrue(Condition := fbProbe.nHaOnlineReceived = 3 AND fbProbe.nBirthRefreshStarted = 1, Message := 'StateSnapshot duplicate adds a receipt without another refresh start');
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'In-flight state snapshot remains pending after coalesced birth');
+AssertTrue(Condition := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState) AND (sState = 'OFF'), Message := 'Snapshot plans the actual current logical PLC state');
+AssertTrue(Condition := fbProbe.OnlineAcceptedForTest() AND fbProbe.ConnectedSessionStableForTest(), Message := 'Refresh preserves online availability, subscriptions, queue reset, and transport connection');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Accepted current logical state completes snapshot');
+AssertFalse(Condition := fbProbe.BirthRefreshActiveForTest(), Message := 'Refresh flag clears only after state planner has no pending snapshot');
+AssertTrue(Condition := fbProbe.nBirthRefreshCompleted = 1, Message := 'Accepted state after settled discovery completes refresh once');
+fbProbe.PlanCurrentStateForTest(aLights := aLights);
+AssertTrue(Condition := fbProbe.nBirthRefreshCompleted = 1, Message := 'Repeated settled planning does not recount completion');
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'offlineX', nStatusSize := 8);
+AssertTrue(Condition := nGeneration = 0, Message := 'Non-exact offline is ignored');
+aLights[1].bOn := TRUE;
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.BirthRefreshActiveForTest() AND (nGeneration = 0), Message := 'Repeated online after completed refresh requests a new replay');
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sDiscoveryTopic, sPayload => sDiscoveryPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanPending, Message := 'Post-completion birth starts another real discovery replay');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sDiscoveryTopic, sPayload := sDiscoveryPayload, nPayloadSize := PayloadByteLength(sValue := sDiscoveryPayload));
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sDiscoveryTopic, sPayload => sDiscoveryPayload);
+AssertTrue(Condition := bPlanAccepted AND NOT bPlanPending AND fbProbe.DiscoveryReadyForTest(), Message := 'Second discovery replay settles independently');
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Repeated Ready birth schedules another current state snapshot');
+AssertTrue(Condition := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState) AND (sState = 'ON'), Message := 'Repeated birth snapshots the latest changed logical state');
+fbProbe.ConfirmStateForTest(bAccepted := FALSE);
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights) AND fbProbe.BirthRefreshActiveForTest(), Message := 'Rejected state snapshot remains pending and cannot finish refresh');
+AssertTrue(Condition := fbProbe.nBirthRefreshCompleted = 1, Message := 'Rejected STATE does not increment completion');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Second accepted snapshot completes repeated birth refresh');
+AssertTrue(Condition := fbProbe.nBirthRefreshStarted = 2 AND fbProbe.nBirthRefreshCompleted = 2, Message := 'Later Birth starts and completes one new refresh');
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'offline', nStatusSize := 7);
+AssertTrue(Condition := nGeneration = 0 AND NOT fbProbe.BirthRefreshActiveForTest(), Message := 'Offline observation is diagnostic and does not create refresh');
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'offline', nStatusSize := 7);
+AssertTrue(Condition := nGeneration = 0, Message := 'Duplicate offline does not alter generation');
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := nGeneration = 0 AND fbProbe.BirthRefreshActiveForTest(), Message := 'Offline-to-online in established Ready requests a refresh');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="AvailabilityOutcomesAreGenerationGuarded" Id="{e3f5f96a-fdca-4b59-9d11-c2202c0847b6}">
+      <Declaration><![CDATA[METHOD PRIVATE AvailabilityOutcomesAreGenerationGuarded
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+    nGeneration : UDINT;
+    sState : STRING(3);
+    bOutcome : BOOL;
+    nPriorGeneration : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Availability outcome helper rejects errors, disconnects, and stale generations');
+IF TcUnit.IS_TEST_FINISHED('Availability outcome helper rejects errors, disconnects, and stale generations') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+fbProbe.bTestNamespace := TRUE;
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OfflineFence, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := FALSE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertTrue(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := FALSE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Offline fence accepts before subscriptions');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.Discovery, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := FALSE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertTrue(Condition := fbProbe.OfflineFenceAcceptedForTest() AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Discovery), Message := 'Offline milestone is preserved while subscriptions wait');
+fbProbe.RunPublishCycleForTest(aLights := aLights);
+AssertTrue(Condition := fbProbe.OfflineFenceAcceptedForTest(), Message := 'Production publish guard preserves offline milestone while subscription prerequisites wait');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+bOutcome := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE);
+AssertTrue(Condition := bOutcome, Message := 'Current accepted result initially commits ready');
+fbProbe.SyncReadinessForTest();
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Command is queued before failed publish');
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := TRUE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Accepted result with error cannot commit ready');
+AssertFalse(Condition := fbProbe.bReady, Message := 'Error invalidates command readiness');
+AssertTrue(Condition := fbProbe.nLifecycleGeneration = nGeneration, Message := 'Transport loss does not create duplicate generation transitions');
+nGeneration := fbProbe.nLifecycleGeneration;
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 0, Message := 'Publish error immediately clears FIFO count');
+stCommand := fbProbe.PopCommand();
+AssertFalse(Condition := stCommand.bValid, Message := 'Publish error purges queued command');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.Discovery, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Wrong lifecycle phase cannot commit ready');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := FALSE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Missing subscriptions cannot commit ready');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := FALSE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Incomplete queue reset cannot commit ready');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := TRUE, bSessionRejectedForTest := FALSE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Disconnect fence blocks ready outcome');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := TRUE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Rejected resumed session blocks ready outcome');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := FALSE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Rejected availability result cannot commit ready');
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := FALSE, bLogicalConnected := TRUE), Message := 'Disconnected result cannot commit ready');
+nGeneration := fbProbe.nLifecycleGeneration;
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Coverage fence blocks otherwise valid online result');
+(* The injected successful outcome models recovery after transport loss, so clear the production fence explicitly. *)
+fbProbe.ClearCommandCoverageFenceForTest();
+AssertFalse(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration - 1, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Stale generation cannot commit ready');
+AssertFalse(Condition := fbProbe.bReady, Message := 'Rejected prerequisites never restore ready');
+AssertTrue(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Current accepted result commits ready');
+fbProbe.SyncReadinessForTest();
+AssertTrue(Condition := fbProbe.bReady AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready), Message := 'Ready phase follows guarded accepted outcome');
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Command queues before transport fault');
+fbProbe.TransportLossForTest(bActualConnected := TRUE, bForceDisconnect := TRUE);
+AssertTrue(Condition := fbProbe.nLifecycleGeneration = nGeneration, Message := 'Repeated transport fault does not churn generation');
+stCommand := fbProbe.PopCommand();
+AssertFalse(Condition := stCommand.bValid OR fbProbe.bReady, Message := 'Transport fault immediately purges command readiness and FIFO');
+nPriorGeneration := nGeneration;
+nGeneration := fbProbe.BeginGenerationForTest();
+AssertTrue(Condition := nGeneration = nPriorGeneration + 1, Message := 'Generation start advances once through shared transition helper');
+bOutcome := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState);
+AssertTrue(Condition := bOutcome, Message := 'Generation start requests state snapshot while command readiness is disabled');
+AssertTrue(Condition := sState = 'OFF', Message := 'Snapshot plans current logical state');
+aLights[1].bOn := TRUE;
+bOutcome := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState);
+AssertTrue(Condition := bOutcome AND (sState = 'ON'), Message := 'Pending snapshot replans a changed current state');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="BirthRefreshPreservesCommandFifo" Id="{9c42e7a6-cf69-4480-83b7-0c954553a9d8}">
+      <Declaration><![CDATA[METHOD PRIVATE BirthRefreshPreservesCommandFifo
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+    nGeneration : UDINT;
+    fbLight : S85Core.FB_Light;
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    bPlanAccepted : BOOL;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    sState : STRING(3);
+END_VAR]]></Declaration>
+<Implementation><ST><![CDATA[TEST('HA birth refresh preserves readiness and queued SET order');
+IF TcUnit.IS_TEST_FINISHED('HA birth refresh preserves readiness and queued SET order') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+fbProbe.bTestNamespace := TRUE;
+AssertTrue(Condition := fbProbe.EstablishReadyForBirthTest(aLights := aLights), Message := 'Fixture reaches Ready through actual discovery and availability paths');
+nGeneration := fbProbe.nLifecycleGeneration;
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'First SET queues before HA birth');
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.BirthRefreshActiveForTest() AND fbProbe.bReady, Message := 'First unknown-to-online in Ready starts refresh without changing command readiness');
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Second SET is admitted during refresh');
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 2, Message := 'Both SETs remain in the real protocol FIFO');
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanPending, Message := 'Discovery replay makes real publication progress while commands wait in FIFO');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND NOT bPlanPending AND fbProbe.DiscoveryReadyForTest(), Message := 'Exact broker observation settles refresh discovery');
+fbProbe.SyncReadinessForTest();
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 2 AND fbProbe.bReady, Message := 'Readiness synchronization after discovery preserves both queued SETs');
+stCommand := fbProbe.PopCommand();
+AssertTrue(Condition := stCommand.bValid AND NOT stCommand.bTargetOn, Message := 'First SET remains first across birth');
+fbLight(bToggle := TRUE, bSetValid := stCommand.bValid, bTargetOn := stCommand.bTargetOn);
+aLights[1].bOn := fbLight.bOn;
+AssertTrue(Condition := fbLight.bOn, Message := 'Same-scan physical toggle has priority over popped MQTT OFF');
+stCommand := fbProbe.PopCommand();
+AssertTrue(Condition := stCommand.bValid AND stCommand.bTargetOn, Message := 'Second SET remains second across birth');
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 0, Message := 'Both queued SETs pop exactly once');
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'State planner runs after physical and queued-command arbitration');
+AssertTrue(Condition := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState) AND (sState = 'ON'), Message := 'Published STATE follows the physical-priority logical result');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Accepted STATE completes refresh without changing Ready');
+AssertTrue(Condition := fbProbe.bReady AND (fbProbe.nLifecycleGeneration = nGeneration), Message := 'Birth does not disconnect, fence, or reset generation');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="NewConnectionResetsBirthObservation" Id="{92f5732b-9f66-4aa5-b7b3-b6f1d2dcd929}">
+      <Declaration><![CDATA[METHOD PRIVATE NewConnectionResetsBirthObservation
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    nGeneration : UDINT;
+END_VAR]]></Declaration>
+<Implementation><ST><![CDATA[TEST('New connected session resets HA observation and ignores births until Ready');
+IF TcUnit.IS_TEST_FINISHED('New connected session resets HA observation and ignores births until Ready') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sId := 'main';
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := nGeneration = 0, Message := 'Initial unknown-to-online observation is diagnostic only');
+nGeneration := fbProbe.BeginConnectedSessionForTest(aLights := aLights);
+AssertTrue(Condition := nGeneration = 1 AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.OfflineFence), Message := 'New session begins full offline-fence replay');
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := nGeneration = 1, Message := 'Online during session recovery does not create a birth generation');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="MetadataReconciliationUsesProductionHelper" Id="{60b4eec1-b5f2-48aa-bbc1-21e83ab72d20}">
+      <Declaration><![CDATA[METHOD PRIVATE MetadataReconciliationUsesProductionHelper
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    bPlanAccepted : BOOL;
+    bSnapshotPending : BOOL;
+    sTopic : STRING(255);
+    sPreviousTopic : STRING(255);
+    sPayload : STRING(2047);
+    sPreviousPayload : STRING(2047);
+    sState : STRING(3);
+    nGeneration : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Production metadata reconciliation invalidates readiness and independently snapshots current state');
+IF TcUnit.IS_TEST_FINISHED('Production metadata reconciliation invalidates readiness and independently snapshots current state') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanValid AND bPlanPending, Message := 'Initial valid metadata plans discovery');
+sPreviousTopic := sTopic; sPreviousPayload := sPayload;
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanValid AND NOT bPlanPending, Message := 'Matching broker observation settles initial metadata');
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Initial state is planned before online announcement');
+AssertTrue(Condition := fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.StateSnapshot, Message := 'State publication enters snapshot phase');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertTrue(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := fbProbe.nLifecycleGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Ready state is established through guarded production outcome');
+fbProbe.SyncReadinessForTest();
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Settled unchanged state has no further publication');
+AssertTrue(Condition := fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready, Message := 'Settled scan preserves Ready phase');
+aLights[1].bOn := TRUE;
+nGeneration := fbProbe.nLifecycleGeneration;
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Changed logical state is pending while already online');
+AssertTrue(Condition := fbProbe.bReady AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready), Message := 'Pending state update does not demote Ready');
+fbProbe.ConfirmStateForTest(bAccepted := FALSE);
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Rejected current-state publication retries');
+AssertTrue(Condition := fbProbe.bReady AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready), Message := 'Rejected retry preserves Ready');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertTrue(Condition := fbProbe.nLifecycleGeneration = nGeneration, Message := 'State retry and acceptance do not start a generation');
+AssertTrue(Condition := fbProbe.bReady AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready), Message := 'Accepted state retry keeps readiness and Ready phase');
+aLights[1].bOn := FALSE;
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Reverted logical state is published while ready');
+AssertTrue(Condition := fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready, Message := 'Reverted state remains in Ready phase');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'State settles to original value without replay');
+AssertTrue(Condition := fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.Ready, Message := 'Settled state leaves Ready phase stable');
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'FIFO contains command before metadata rename');
+aLights[1].sName := 'Ceiling Renamed';
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertFalse(Condition := bPlanAccepted, Message := 'Rename starts a new generation before config submission');
+AssertTrue(Condition := bPlanValid AND NOT bPlanPending, Message := 'First reconciliation fences renamed catalog before planning');
+AssertFalse(Condition := fbProbe.bReady, Message := 'Rename invalidates command readiness');
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 0, Message := 'Rename immediately purges queued commands');
+bSnapshotPending := fbProbe.PlanCurrentStateForTest(aLights := aLights);
+AssertTrue(Condition := bSnapshotPending AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.StateSnapshot), Message := 'Metadata helper sets snapshot phase for unchanged state');
+bSnapshotPending := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState);
+AssertTrue(Condition := bSnapshotPending AND (sState = 'OFF'), Message := 'Rename requests unchanged current state snapshot independently');
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanPending AND (sTopic = sPreviousTopic) AND (sPayload <> sPreviousPayload), Message := 'Subsequent reconciliation plans renamed payload on stable topic');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanValid AND NOT bPlanPending, Message := 'Exact observation advances renamed metadata after generation fence');
+aLights[1].sName := '';
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertFalse(Condition := bPlanAccepted OR bPlanValid OR bPlanPending, Message := 'Invalid metadata blocks publication');
+nGeneration := fbProbe.nLifecycleGeneration;
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := fbProbe.nLifecycleGeneration = nGeneration, Message := 'Repeated invalid metadata does not churn generation');
+aLights[1].sName := 'Ceiling Recovered';
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bPlanValid AND bPlanPending, Message := 'Valid metadata recovery produces fresh discovery');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+bSnapshotPending := fbProbe.PlanCurrentStateForTest(aLights := aLights);
+AssertTrue(Condition := bSnapshotPending AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.StateSnapshot), Message := 'Recovery replans unchanged current state in snapshot phase');
+bSnapshotPending := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState);
+AssertTrue(Condition := bSnapshotPending AND (sState = 'OFF'), Message := 'Recovered metadata still requires fresh unchanged state');
+aLights[1].bOn := TRUE;
+bSnapshotPending := fbProbe.PlanCurrentStateForTest(aLights := aLights);
+AssertTrue(Condition := bSnapshotPending AND (fbProbe.eLifecyclePhase = E_MqttLifecyclePhase.StateSnapshot), Message := 'Logical state change during recovery remains in snapshot phase');
+bSnapshotPending := fbProbe.PlanSnapshotForTest(aLights := aLights, sPayload => sState);
+AssertTrue(Condition := bSnapshotPending AND (sState = 'ON'), Message := 'Snapshot follows logical state changes during metadata replay');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="OversizedIntegrationCatalogCountIsRejected" Id="{40d9eae5-256e-4cab-a94d-b3bed519ec62}">
+      <Declaration><![CDATA[METHOD PRIVATE OversizedIntegrationCatalogCountIsRejected
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    bValid : BOOL;
+    nCatalogCount : DINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Integration catalog count stays signed and rejects beyond sixteen before narrowing');
+IF TcUnit.IS_TEST_FINISHED('Integration catalog count stays signed and rejects beyond sixteen before narrowing') THEN RETURN; END_IF
+bValid := fbProbe.ValidateCatalogBoundsForTest(nLowerBound := 1, nUpperBound := 17, nCatalogCount => nCatalogCount);
+AssertFalse(Condition := bValid, Message := 'Seventeen catalog entries are rejected');
+AssertTrue(Condition := nCatalogCount = 17, Message := 'Seventeen-entry count is retained as DINT');
+bValid := fbProbe.ValidateCatalogBoundsForTest(nLowerBound := 1, nUpperBound := 65536, nCatalogCount => nCatalogCount);
+AssertFalse(Condition := bValid, Message := 'Count beyond UINT capacity is rejected before narrowing');
+AssertTrue(Condition := nCatalogCount = 65536, Message := 'Large catalog count remains intact in DINT');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="CoverageFaultDoesNotScheduleRecovery" Id="{ac305df7-e8c7-4b81-b5ef-c66dc0dc70cf}">
+      <Declaration><![CDATA[METHOD PRIVATE CoverageFaultDoesNotScheduleRecovery
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Coverage fault is diagnostic and never schedules an automatic reconnect');
+IF TcUnit.IS_TEST_FINISHED('Coverage fault is diagnostic and never schedules an automatic reconnect') THEN RETURN; END_IF
+fbProbe.HandleQueueCoverageLossForTest();
+AssertTrue(Condition := fbProbe.bDiscoveryCoverageFault, Message := 'Coverage loss latches its diagnostic fault');
+AssertFalse(Condition := fbProbe.DisconnectForTest(), Message := 'Coverage fault does not schedule a disconnect');
+AssertTrue(Condition := fbProbe.RecoveryRequestedForTest(), Message := 'Coverage fault remains recorded as requiring operational recovery');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="QueueCoverageLossFencesCommandsButAllowsDiscovery" Id="{77874436-cc28-4bf0-96ca-17b9b48f3348}">
+      <Declaration><![CDATA[METHOD PRIVATE QueueCoverageLossFencesCommandsButAllowsDiscovery
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+    nGeneration : UDINT;
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    sLegacyOne : STRING(255) := 'homeassistant/device/s85/legacy_one/config';
+    sLegacyTwo : STRING(255) := 'homeassistant/device/s85/legacy_two/config';
+    sHistoricalPayload : STRING(2047) := 'x';
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Queue coverage loss fences commands while discovery replay remains publishable');
+IF TcUnit.IS_TEST_FINISHED('Queue coverage loss fences commands while discovery replay remains publishable') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+(* Discovery is private and this test bypasses ReceiveCycle, so use its default s85 namespace. *)
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload);
+fbProbe.ObserveDiscoveryForTest(sTopic := sLegacyOne, sPayload := sHistoricalPayload, nPayloadSize := INT_TO_UDINT(LEN(sHistoricalPayload)));
+fbProbe.ObserveDiscoveryForTest(sTopic := sLegacyTwo, sPayload := sHistoricalPayload, nPayloadSize := INT_TO_UDINT(LEN(sHistoricalPayload)));
+AssertTrue(Condition := fbProbe.PendingOrphanCountForTest() = 2, Message := 'Two matching historical observations create two real orphan records');
+nGeneration := fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+AssertTrue(Condition := fbProbe.InjectAvailabilityOutcome(nGeneration := nGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE), Message := 'Fixture starts in accepted online generation');
+fbProbe.SyncReadinessForTest();
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Ready fixture accepts command before coverage loss');
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 1, Message := 'Exactly one command is queued immediately before coverage loss');
+fbProbe.HandleQueueCoverageLossForTest();
+AssertTrue(Condition := fbProbe.PendingOrphanCountForTest() = 2, Message := 'Coverage-loss precondition retains both actual orphan records');
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 0, Message := 'Coverage loss immediately clears command FIFO');
+stCommand := fbProbe.PopCommand();
+AssertFalse(Condition := stCommand.bValid, Message := 'Pop remains blocked after coverage loss');
+AssertTrue(Condition := fbProbe.CanPublishDiscoveryForTest(), Message := 'Coverage loss leaves discovery replay publishable');
+AssertFalse(Condition := fbProbe.CanPublishStateOnlineForTest(), Message := 'Coverage loss blocks state and online publication');
+fbProbe.ObserveDiscoveryForTest(sTopic := sLegacyOne, sPayload := '', nPayloadSize := 0);
+AssertTrue(Condition := fbProbe.PendingOrphanCountForTest() = 1, Message := 'Exact empty observation retires one of the two actual orphans');
+AssertTrue(Condition := fbProbe.RetirementCountForTest() > 0, Message := 'Production retirement counter confirms cleanup progress');
+AssertTrue(Condition := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sTopic => sTopic, sPayload => sPayload) AND bPlanValid AND bPlanPending AND (LEN(sPayload) = 0), Message := 'Remaining observed orphan plans its exact empty tombstone');
+AssertTrue(Condition := fbProbe.CanPublishDiscoveryForTest(), Message := 'Exact empty historical observation and tombstone plan remain discovery-publishable');
+AssertFalse(Condition := fbProbe.CanPublishStateOnlineForTest(), Message := 'Orphan retirement does not clear the command coverage fence');
+AssertTrue(Condition := fbProbe.RecoveryRequestedForTest(), Message := 'Coverage remains marked for separately authorized recovery');
+AssertFalse(Condition := fbProbe.DisconnectForTest(), Message := 'Coverage loss never schedules an automatic disconnect');
+AssertTrue(Condition := fbProbe.CanPublishDiscoveryForTest(), Message := 'Discovery remains available for admitted cleanup');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="BirthDiagnosticsCountValidEventsAndSaturate" Id="{320ebd92-d3a0-405e-bba9-a109ac3bea98}">
+      <Declaration><![CDATA[METHOD PRIVATE BirthDiagnosticsCountValidEventsAndSaturate
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    bValid : BOOL;
+    bPending : BOOL;
+    bOutcome : BOOL;
+    bPlanAccepted : BOOL;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('HA Birth counters count exact receipts and saturate in their active branches');
+IF TcUnit.IS_TEST_FINISHED('HA Birth counters count exact receipts and saturate in their active branches') THEN RETURN; END_IF
+fbProbe.ObserveHaStatusForTest(sStatus := 'onlineX', nStatusSize := 7);
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 5);
+AssertTrue(Condition := fbProbe.nHaOnlineReceived = 0, Message := 'Invalid payload and length do not count online');
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.nHaOnlineReceived = 1 AND fbProbe.nBirthRefreshStarted = 0, Message := 'Startup online counts receipt but not refresh start');
+fbProbe.SetBirthDiagnosticsForTest(nOnline := 16#FFFFFFFE, nStarted := 0, nCompleted := 0);
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.nHaOnlineReceived = 16#FFFFFFFF, Message := 'Online receipt branch saturates at UDINT_MAX');
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.nHaOnlineReceived = 16#FFFFFFFF, Message := 'Further online receipts do not wrap at UDINT_MAX');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+AssertTrue(Condition := fbProbe.EstablishReadyForBirthTest(aLights := aLights), Message := 'Fixture reaches Ready before refresh saturation check');
+fbProbe.SetBirthDiagnosticsForTest(nOnline := 0, nStarted := 16#FFFFFFFE, nCompleted := 16#FFFFFFFE);
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.nBirthRefreshStarted = 16#FFFFFFFF, Message := 'Actual Ready branch saturates refresh-start counter');
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bValid AND bPending, Message := 'Replay requires fresh Discovery');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Replay proceeds to STATE');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Accepted STATE completes replay');
+AssertTrue(Condition := fbProbe.nBirthRefreshCompleted = 16#FFFFFFFF, Message := 'Actual completion branch saturates completion counter');
+fbProbe.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+AssertTrue(Condition := fbProbe.nBirthRefreshStarted = 16#FFFFFFFF, Message := 'Further actual refresh starts do not wrap at UDINT_MAX');
+bPlanAccepted := fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPlanAccepted AND bValid AND bPending, Message := 'Next saturated refresh still requires fresh Discovery');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Next saturated refresh still requires STATE');
+fbProbe.ConfirmStateForTest(bAccepted := TRUE);
+AssertFalse(Condition := fbProbe.PlanCurrentStateForTest(aLights := aLights), Message := 'Next saturated refresh completes normally');
+AssertTrue(Condition := fbProbe.nBirthRefreshCompleted = 16#FFFFFFFF, Message := 'Further actual completions do not wrap at UDINT_MAX');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="BirthRefreshAbortionsDoNotCountCompletion" Id="{8ca5f314-d5cf-4b3a-a13c-75f6c708f7b8}">
+      <Declaration><![CDATA[METHOD PRIVATE BirthRefreshAbortionsDoNotCountCompletion
+VAR_INST
+    fbTransport : FB_MqttIntegrationQueueProbe;
+    fbCatalog : FB_MqttIntegrationQueueProbe;
+    fbCoverage : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    bValid : BOOL;
+    bPending : BOOL;
+    bPlanAccepted : BOOL;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    nOnline : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Transport, catalog, and coverage aborts never count completed Birth refresh');
+IF TcUnit.IS_TEST_FINISHED('Transport, catalog, and coverage aborts never count completed Birth refresh') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+AssertTrue(Condition := fbTransport.EstablishReadyForBirthTest(aLights := aLights), Message := 'Transport fixture reaches Ready');
+fbTransport.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+nOnline := fbTransport.nHaOnlineReceived;
+fbTransport.TransportLossForTest(bActualConnected := TRUE, bForceDisconnect := FALSE);
+AssertTrue(Condition := NOT fbTransport.BirthRefreshActiveForTest() AND fbTransport.nBirthRefreshCompleted = 0, Message := 'Transport loss aborts without completion');
+fbTransport.BeginConnectedSessionForTest(aLights := aLights);
+AssertTrue(Condition := fbTransport.nHaOnlineReceived = nOnline AND fbTransport.nBirthRefreshCompleted = 0, Message := 'Counters persist across connected session and startup recovery is not completion');
+AssertTrue(Condition := fbCatalog.EstablishReadyForBirthTest(aLights := aLights), Message := 'Catalog fixture reaches Ready');
+fbCatalog.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+aLights[1].sName := 'Renamed';
+bPlanAccepted := fbCatalog.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := NOT fbCatalog.BirthRefreshActiveForTest() AND fbCatalog.nBirthRefreshCompleted = 0, Message := 'Catalog fence aborts without completion');
+AssertTrue(Condition := fbCoverage.EstablishReadyForBirthTest(aLights := aLights), Message := 'Coverage fixture reaches Ready');
+fbCoverage.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+fbCoverage.HandleQueueCoverageLossForTest();
+AssertTrue(Condition := NOT fbCoverage.BirthRefreshActiveForTest() AND fbCoverage.nBirthRefreshCompleted = 0, Message := 'Coverage fence aborts without completion');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="BirthRefreshFaultsStillFence" Id="{7b3d60c0-3606-4567-b235-6606dc2ec689}">
+      <Declaration><![CDATA[METHOD PRIVATE BirthRefreshFaultsStillFence
+VAR_INST
+    fbCatalog : FB_MqttIntegrationQueueProbe;
+    fbMismatch : FB_MqttIntegrationQueueProbe;
+    fbTransport : FB_MqttIntegrationQueueProbe;
+    fbCoverage : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aCatalogLights : ARRAY[1..1] OF ST_LightInfo;
+    aMismatchLights : ARRAY[1..1] OF ST_LightInfo;
+    aTransportLights : ARRAY[1..1] OF ST_LightInfo;
+    aCoverageLights : ARRAY[1..1] OF ST_LightInfo;
+    bValid : BOOL;
+    bPending : BOOL;
+    bPlanAccepted : BOOL;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    sWrong : STRING(2047);
+    nGeneration : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Real catalog, observation, transport, and coverage faults cancel birth refresh');
+IF TcUnit.IS_TEST_FINISHED('Real catalog, observation, transport, and coverage faults cancel birth refresh') THEN RETURN; END_IF
+aCatalogLights[1].sLocationId := 'H.01-09'; aCatalogLights[1].sLocationName := 'Workshop'; aCatalogLights[1].sId := 'main'; aCatalogLights[1].sName := 'Ceiling';
+aMismatchLights[1] := aCatalogLights[1]; aTransportLights[1] := aCatalogLights[1]; aCoverageLights[1] := aCatalogLights[1];
+AssertTrue(Condition := fbCatalog.EstablishReadyForBirthTest(aLights := aCatalogLights), Message := 'Catalog-change fixture settles real discovery and online availability');
+nGeneration := fbCatalog.nLifecycleGeneration;
+fbCatalog.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+aCatalogLights[1].sName := 'Renamed';
+bPlanAccepted := fbCatalog.ReconcileMetadataForTest(aLights := aCatalogLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertFalse(Condition := bPlanAccepted OR bPending, Message := 'Name-only catalog change returns before planning changed discovery');
+AssertTrue(Condition := bValid AND fbCatalog.nLifecycleGeneration = nGeneration + 1, Message := 'Name-only payload change fences an active refresh');
+AssertTrue(Condition := fbCatalog.eLifecyclePhase = E_MqttLifecyclePhase.OfflineFence, Message := 'Catalog fence retains OfflineFence phase for the next cycle');
+AssertFalse(Condition := fbCatalog.BirthRefreshActiveForTest() OR fbCatalog.bReady, Message := 'Catalog fault cancels refresh and command readiness');
+
+AssertTrue(Condition := fbMismatch.EstablishReadyForBirthTest(aLights := aMismatchLights), Message := 'Mismatch fixture settles real discovery and online availability');
+nGeneration := fbMismatch.nLifecycleGeneration;
+fbMismatch.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+fbMismatch.ReconcileMetadataForTest(aLights := aMismatchLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+sWrong := 'not the desired discovery document';
+fbMismatch.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sWrong, nPayloadSize := PayloadByteLength(sValue := sWrong));
+AssertTrue(Condition := fbMismatch.UnexpectedObservationForTest(), Message := 'Mismatching desired observation is surfaced during replay');
+AssertTrue(Condition := fbMismatch.nLifecycleGeneration = nGeneration + 1, Message := 'Unexpected observation during refresh follows the existing fence path');
+AssertFalse(Condition := fbMismatch.BirthRefreshActiveForTest(), Message := 'Unexpected observation cancels refresh exception');
+
+AssertTrue(Condition := fbTransport.EstablishReadyForBirthTest(aLights := aTransportLights), Message := 'Transport fixture establishes ready state');
+fbTransport.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+fbTransport.TransportLossForTest(bActualConnected := TRUE, bForceDisconnect := FALSE);
+AssertFalse(Condition := fbTransport.BirthRefreshActiveForTest() OR fbTransport.bReady, Message := 'Transport loss cancels refresh through invalidation');
+
+AssertTrue(Condition := fbCoverage.EstablishReadyForBirthTest(aLights := aCoverageLights), Message := 'Coverage fixture establishes ready state');
+fbCoverage.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+fbCoverage.HandleQueueCoverageLossForTest();
+AssertFalse(Condition := fbCoverage.BirthRefreshActiveForTest() OR fbCoverage.bReady, Message := 'Coverage loss cancels refresh through the production fence');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ReceivedTopicValidationFailsClosed" Id="{93854821-75e4-4f78-a6ca-2ce405e4f71c}">
+      <Declaration><![CDATA[METHOD PRIVATE ReceivedTopicValidationFailsClosed
+VAR_INST
+    fbForeign : FB_MqttIntegrationQueueProbe;
+    fbOwn : FB_MqttIntegrationQueueProbe;
+    fbBad : FB_MqttIntegrationQueueProbe;
+    fbCopy : FB_MqttIntegrationQueueProbe;
+    fbPayload : FB_MqttIntegrationQueueProbe;
+    fbOrphan : FB_MqttIntegrationQueueProbe;
+    fbEmpty : FB_MqttIntegrationQueueProbe;
+    fbMismatch : FB_MqttIntegrationQueueProbe;
+    fbUnterminated : FB_MqttIntegrationQueueProbe;
+    fbTopicMap : S85Core.FB_MqttTopicMap;
+END_VAR
+VAR
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    bValid : BOOL;
+    bPending : BOOL;
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Received topic validation distinguishes exact foreign topics from unclassifiable bytes');
+IF TcUnit.IS_TEST_FINISHED('Received topic validation distinguishes exact foreign topics from unclassifiable bytes') THEN RETURN; END_IF
+sTopic := 'homeassistant/status';
+AssertTrue(Condition := fbForeign.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := INT_TO_UDINT(LEN(sTopic)), sTopic := sTopic), Message := 'Exact foreign topic is copied and classifiable');
+AssertFalse(Condition := fbForeign.bDiscoveryCoverageFault, Message := 'Verified foreign topic does not latch a coverage fault');
+sTopic := 'homeassistant/device/s85_test/legacy/config';
+AssertTrue(Condition := fbOwn.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := INT_TO_UDINT(LEN(sTopic)), sTopic := sTopic), Message := 'Exact own topic is copied and classifiable');
+AssertFalse(Condition := fbOwn.bDiscoveryCoverageFault, Message := 'Verified own topic alone does not fault coverage');
+FOR i := 0 TO SIZEOF(sTopic) - 1 DO sTopic[i] := 65; END_FOR
+sTopic[254] := 0;
+AssertTrue(Condition := fbOwn.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 254, sTopic := sTopic), Message := '254-byte content accepted');
+FOR i := 0 TO SIZEOF(sTopic) - 1 DO sTopic[i] := 65; END_FOR
+sTopic[255] := 0;
+AssertTrue(Condition := fbOwn.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 255, sTopic := sTopic), Message := '255-byte content without advertised terminator accepted');
+AssertTrue(Condition := fbOwn.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 256, sTopic := sTopic), Message := '255-byte content with verified final NUL accepted');
+AssertFalse(Condition := fbBad.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 257, sTopic := sTopic), Message := '257-byte advertised topic rejected');
+AssertTrue(Condition := fbBad.bDiscoveryCoverageFault, Message := 'Oversized unclassifiable topic latches coverage fault');
+sTopic := 'homeassistant';
+AssertFalse(Condition := fbCopy.AcceptReceivedTopicForTest(bTopicReceived := FALSE, nTopicSize := 12, sTopic := sTopic), Message := 'Failed copy rejected even when buffer resembles a foreign topic');
+AssertTrue(Condition := fbCopy.bDiscoveryCoverageFault, Message := 'Failed copy latches fault on a fresh fixture');
+AssertFalse(Condition := fbBad.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 0, sTopic := sTopic), Message := 'Empty topic rejected');
+AssertFalse(Condition := fbBad.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 255, sTopic := sTopic), Message := 'Unterminated or mismatched copied topic rejected');
+AssertFalse(Condition := fbEmpty.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 0, sTopic := sTopic), Message := 'Fresh empty-topic fixture rejects independently');
+AssertTrue(Condition := fbEmpty.bDiscoveryCoverageFault AND (fbEmpty.PendingOrphanCountForTest() = 0), Message := 'Empty topic latches without admitting a cleanup topic');
+AssertFalse(Condition := fbMismatch.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 255, sTopic := sTopic), Message := 'Fresh mismatched-length fixture rejects independently');
+AssertTrue(Condition := fbMismatch.bDiscoveryCoverageFault AND (fbMismatch.PendingOrphanCountForTest() = 0), Message := 'Mismatch latches without fabricating cleanup ownership');
+FOR i := 0 TO SIZEOF(sTopic) - 1 DO sTopic[i] := 65; END_FOR
+AssertFalse(Condition := fbUnterminated.AcceptReceivedTopicForTest(bTopicReceived := TRUE, nTopicSize := 255, sTopic := sTopic), Message := 'Fresh unterminated-buffer fixture rejects independently');
+AssertTrue(Condition := fbUnterminated.bDiscoveryCoverageFault AND (fbUnterminated.PendingOrphanCountForTest() = 0), Message := 'Unterminated topic latches without fabricating cleanup ownership');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+fbPayload.bTestNamespace := TRUE;
+AssertTrue(Condition := fbPayload.EstablishReadyForBirthTest(aLights := aLights), Message := 'Payload-failure fixture reaches settled Ready');
+sTopic := fbTopicMap.BuildDiscoveryTopic(bTestNamespace := TRUE, sObjectId := fbTopicMap.BuildIdentity(bTestNamespace := TRUE, sLocationId := aLights[1].sLocationId, sLightId := aLights[1].sId));
+fbPayload.ObserveInvalidDiscoveryForTest(sTopic := sTopic);
+AssertTrue(Condition := NOT fbPayload.bReady AND NOT fbPayload.bDiscoveryCoverageFault, Message := 'Payload copy failure with exact topic makes desired work unsettled without losing topic coverage');
+AssertTrue(Condition := fbPayload.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload) AND bPending AND (sTopic = fbTopicMap.BuildDiscoveryTopic(bTestNamespace := TRUE, sObjectId := fbTopicMap.BuildIdentity(bTestNamespace := TRUE, sLocationId := aLights[1].sLocationId, sLightId := aLights[1].sId))), Message := 'Exact topic remains safely identifiable and desired discovery retries');
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+fbOrphan.bTestNamespace := TRUE;
+AssertTrue(Condition := fbOrphan.EstablishReadyForBirthTest(aLights := aLights), Message := 'Orphan payload-failure fixture initializes test namespace and settles desired identity');
+sTopic := 'homeassistant/device/s85_test/old_identity/config'; sPayload := 'old';
+fbOrphan.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := 3);
+fbOrphan.ObserveInvalidDiscoveryForTest(sTopic := sTopic);
+AssertTrue(Condition := fbOrphan.PendingOrphanCountForTest() = 1 AND NOT fbOrphan.bDiscoveryCoverageFault, Message := 'Failed payload copy preserves an admitted exact orphan topic without losing coverage');
+fbOrphan.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPending AND (LEN(sPayload) = 0) AND (sTopic = 'homeassistant/device/s85_test/old_identity/config'), Message := 'Known exact orphan remains eligible for its exact-topic tombstone');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="OverflowLatchesAcrossCleanupAndReplay" Id="{58d07a1a-d862-4e8c-93cd-52aa9edadd58}">
+      <Declaration><![CDATA[METHOD PRIVATE OverflowLatchesAcrossCleanupAndReplay
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+    fbBirth : FB_MqttIntegrationQueueProbe;
+    fbTransport : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aLights : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    stCommand : ST_LightCommand;
+    i : INT;
+    nDrained : INT;
+    bValid : BOOL;
+    bPending : BOOL;
+    bOutcome : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Thirty-third historical discovery observation latches coverage through cleanup and replay');
+IF TcUnit.IS_TEST_FINISHED('Thirty-third historical discovery observation latches coverage through cleanup and replay') THEN RETURN; END_IF
+aLights[1].sLocationId := 'H.01-09'; aLights[1].sLocationName := 'Workshop'; aLights[1].sId := 'main'; aLights[1].sName := 'Ceiling';
+fbProbe.bTestNamespace := TRUE;
+AssertTrue(Condition := fbProbe.EstablishReadyForBirthTest(aLights := aLights), Message := 'Fixture settles desired discovery and online state first');
+AssertTrue(Condition := fbProbe.ReceiveCommandForTest(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := aLights), Message := 'Command queued before historical overflow');
+FOR i := 1 TO 33 DO
+    sTopic := CONCAT('homeassistant/device/s85_test/legacy', INT_TO_STRING(i)); sTopic := CONCAT(sTopic, '/config'); sPayload := 'old';
+    fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := 3);
+END_FOR
+AssertTrue(Condition := fbProbe.bDiscoveryCoverageFault AND fbProbe.bDiscoveryCoverageLost, Message := 'Thirty-third own topic immediately latches diagnostic fault');
+AssertFalse(Condition := fbProbe.bReady OR fbProbe.CanPublishStateOnlineForTest(), Message := 'Fault immediately fences readiness and state/online publication');
+AssertTrue(Condition := fbProbe.CanPublishDiscoveryForTest(), Message := 'Discovery cleanup remains publishable');
+AssertTrue(Condition := fbProbe.QueueCountForTest() = 0, Message := 'Fault immediately discards the queued command');
+stCommand := fbProbe.PopCommand(); AssertFalse(Condition := stCommand.bValid, Message := 'Faulted fixture cannot pop SET');
+AssertFalse(Condition := fbProbe.ReceiveRoutedCommandForTest(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'OFF', nPayloadSize := 3, aLights := aLights), Message := 'Faulted fixture rejects new SET admission');
+fbProbe.SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+bOutcome := fbProbe.InjectAvailabilityOutcome(nGeneration := fbProbe.nLifecycleGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE);
+AssertFalse(Condition := bOutcome OR fbProbe.OnlineAcceptedForTest() OR fbProbe.bReady, Message := 'Coverage fault rejects otherwise successful online outcome and readiness');
+AssertFalse(Condition := fbProbe.DisconnectForTest(), Message := 'Overflow does not request a connection drop');
+nDrained := 0;
+FOR i := 1 TO 32 DO
+    fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+    IF bPending AND (LEN(sPayload) = 0) THEN
+        fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+        fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := '', nPayloadSize := 0);
+        nDrained := nDrained + 1;
+    END_IF
+END_FOR
+AssertTrue(Condition := nDrained = 32 AND fbProbe.PendingOrphanCountForTest() = 0, Message := 'Actual planned tombstones drain all 32 admitted orphans');
+AssertTrue(Condition := fbProbe.bDiscoveryCoverageFault AND NOT fbProbe.bReady AND fbProbe.RecoveryRequestedForTest(), Message := 'Cleanup does not restore readiness or clear recovery diagnosis');
+fbProbe.TransportLossForTest(bActualConnected := FALSE, bForceDisconnect := FALSE);
+AssertTrue(Condition := fbProbe.bDiscoveryCoverageFault, Message := 'Ordinary transport loss does not clear the latched fault');
+fbProbe.BeginConnectedSessionForTest(aLights := aLights);
+fbProbe.CoverageReplayStartedForTest();
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+IF bPending THEN
+    fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+    fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+END_IF
+sTopic := 'homeassistant/device/s85_test/legacy33/config'; sPayload := 'old';
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := 3);
+fbProbe.ReconcileMetadataForTest(aLights := aLights, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := bPending AND (LEN(sPayload) = 0), Message := 'Reconnect replay admits overflowed exact identity and plans its tombstone');
+fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := '', nPayloadSize := 0);
+AssertTrue(Condition := fbProbe.PendingOrphanCountForTest() = 0 AND fbProbe.bDiscoveryCoverageFault AND NOT fbProbe.bReady, Message := 'Reconnect cleanup cannot clear the latched coverage fault');
+FOR i := 34 TO 66 DO
+    sTopic := CONCAT('homeassistant/device/s85_test/again', INT_TO_STRING(i)); sTopic := CONCAT(sTopic, '/config'); sPayload := 'old';
+    fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := 3);
+END_FOR
+AssertTrue(Condition := fbProbe.bDiscoveryCoverageFault AND fbProbe.RecoveryRequestedForTest(), Message := 'Repeated overflow preserves the same latched diagnostic');
+AssertFalse(Condition := fbProbe.DisconnectForTest() OR fbProbe.CanPublishStateOnlineForTest(), Message := 'Repeated overflow still neither disconnects nor allows online/state');
+fbProbe.CoverageReplayStartedForTest();
+AssertTrue(Condition := fbProbe.RecoveryRequestedForTest() AND fbProbe.bDiscoveryCoverageFault, Message := 'Replay cannot clear latched fault or recovery diagnosis');
+fbProbe.BeginConnectedSessionForTest(aLights := aLights);
+AssertTrue(Condition := fbProbe.bDiscoveryCoverageFault AND NOT fbProbe.CanPublishStateOnlineForTest(), Message := 'New connected session retains fault and blocks online');
+AssertTrue(Condition := fbTransport.EstablishReadyForBirthTest(aLights := aLights), Message := 'Ordinary reconnect fixture starts from Ready');
+fbTransport.TransportLossForTest(bActualConnected := FALSE, bForceDisconnect := FALSE);
+AssertFalse(Condition := fbTransport.bDiscoveryCoverageFault, Message := 'Ordinary transport loss does not set coverage fault');
+fbBirth.bTestNamespace := TRUE;
+AssertTrue(Condition := fbBirth.EstablishReadyForBirthTest(aLights := aLights), Message := 'Birth fixture starts from a settled online baseline');
+fbBirth.ObserveHaStatusForTest(sStatus := 'online', nStatusSize := 6);
+FOR i := 1 TO 33 DO
+    sTopic := CONCAT('homeassistant/device/s85_test/birth', INT_TO_STRING(i)); sTopic := CONCAT(sTopic, '/config'); sPayload := 'x';
+    fbBirth.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := 1);
+END_FOR
+AssertTrue(Condition := NOT fbBirth.BirthRefreshActiveForTest() AND (fbBirth.nBirthRefreshStarted = 1) AND (fbBirth.nBirthRefreshCompleted = 0) AND fbBirth.bDiscoveryCoverageFault, Message := 'Coverage overflow aborts healthy Birth refresh without counting completion');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ObservedRemovalAndReaddDoNotFault" Id="{6e10a01f-1e2e-4b4f-84f3-9ed17344ff07}">
+      <Declaration><![CDATA[METHOD PRIVATE ObservedRemovalAndReaddDoNotFault
+VAR_INST
+    fbProbe : FB_MqttIntegrationQueueProbe;
+END_VAR
+VAR
+    aThree : ARRAY[1..3] OF ST_LightInfo;
+    aTwo : ARRAY[1..2] OF ST_LightInfo;
+    bValid : BOOL;
+    bPending : BOOL;
+    bCompleted : BOOL;
+    i : INT;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    fbTopicMap : S85Core.FB_MqttTopicMap;
+    sRemovedTopic : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Observed catalog removal and re-addition remain safely covered');
+IF TcUnit.IS_TEST_FINISHED('Observed catalog removal and re-addition remain safely covered') THEN RETURN; END_IF
+fbProbe.bTestNamespace := TRUE;
+aThree[1].sLocationId := 'H.01-09'; aThree[1].sLocationName := 'Workshop'; aThree[1].sId := 'one'; aThree[1].sName := 'One';
+aThree[2].sLocationId := 'H.01-09'; aThree[2].sLocationName := 'Workshop'; aThree[2].sId := 'two'; aThree[2].sName := 'Two';
+aThree[3].sLocationId := 'H.01-09'; aThree[3].sLocationName := 'Workshop'; aThree[3].sId := 'three'; aThree[3].sName := 'Three';
+sRemovedTopic := fbTopicMap.BuildDiscoveryTopic(bTestNamespace := TRUE, sObjectId := fbTopicMap.BuildIdentity(bTestNamespace := TRUE, sLocationId := aThree[3].sLocationId, sLightId := aThree[3].sId));
+FOR i := 1 TO 3 DO
+    fbProbe.ReconcileMetadataForTest(aLights := aThree, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+    IF bPending THEN
+        fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+        fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+    END_IF
+END_FOR
+aTwo[1] := aThree[1]; aTwo[2] := aThree[2];
+fbProbe.ReconcileMetadataForTest(aLights := aTwo, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+AssertTrue(Condition := fbProbe.PendingOrphanCountForTest() = 1 AND NOT fbProbe.bDiscoveryCoverageFault, Message := 'Observed third identity becomes a safely tracked orphan without a coverage fault');
+bCompleted := FALSE;
+FOR i := 1 TO 8 DO
+    fbProbe.ReconcileMetadataForTest(aLights := aTwo, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+    IF bPending AND (sTopic = sRemovedTopic) AND (LEN(sPayload) = 0) THEN
+        fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+        fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := '', nPayloadSize := 0);
+        bCompleted := TRUE;
+        EXIT;
+    END_IF
+END_FOR
+AssertTrue(Condition := bCompleted AND (fbProbe.PendingOrphanCountForTest() = 0) AND NOT fbProbe.bDiscoveryCoverageFault, Message := 'Exact orphan tombstone is published and observed without coverage fault');
+fbProbe.ReconcileMetadataForTest(aLights := aThree, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+bCompleted := FALSE;
+FOR i := 1 TO 8 DO
+    IF bPending AND (sTopic = sRemovedTopic) AND (LEN(sPayload) > 0) THEN
+        fbProbe.ConfirmDiscoveryForTest(bAccepted := TRUE, bPublishError := FALSE);
+        fbProbe.ObserveDiscoveryForTest(sTopic := sTopic, sPayload := sPayload, nPayloadSize := PayloadByteLength(sValue := sPayload));
+        bCompleted := TRUE;
+        EXIT;
+    END_IF
+    fbProbe.ReconcileMetadataForTest(aLights := aThree, bPlanValid => bValid, bPlanPending => bPending, sTopic => sTopic, sPayload => sPayload);
+END_FOR
+AssertTrue(Condition := bCompleted AND fbProbe.DiscoveryReadyForTest() AND NOT fbProbe.bDiscoveryCoverageFault, Message := 'Re-added identity republishes and settles its exact discovery topic');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="PayloadByteLength" Id="{b46bf682-1e99-4846-b8b0-9b5a64bcfd77}">
+      <Declaration><![CDATA[METHOD PRIVATE PayloadByteLength : UDINT
+VAR_INPUT
+    sValue : STRING(2047);
+END_VAR
+VAR
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[PayloadByteLength := SIZEOF(sValue);
+FOR i := 0 TO SIZEOF(sValue) - 1 DO
+    IF sValue[i] = 0 THEN PayloadByteLength := i; RETURN; END_IF
+END_FOR]]></ST></Implementation>
     </Method>
   </POU>
 </TcPlcObject>

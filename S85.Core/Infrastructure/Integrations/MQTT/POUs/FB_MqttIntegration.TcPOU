@@ -1,10 +1,14 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_MqttIntegration" Id="{2edb5703-d69e-4e5d-8d26-cf7b8459c948}" SpecialFunc="None">
     <Declaration><![CDATA[{attribute 'no_assign'}
 FUNCTION_BLOCK FB_MqttIntegration
+VAR_INPUT
+    bTestNamespace : BOOL := FALSE;
+END_VAR
 VAR_OUTPUT
     bConnected : BOOL;
+    bReady : BOOL;
     bError : BOOL;
     hrErrorCode : HRESULT;
     bSubscriptionsAccepted : BOOL;
@@ -12,21 +16,46 @@ VAR_OUTPUT
     bSessionPresentRejected : BOOL;
     nRejectedMessages : UDINT;
     nRejectedQueue : UDINT;
+    nLifecycleGeneration : UDINT;
+    nDiscoveryOrphanOverflow : UDINT;
+    bDiscoveryCoverageLost : BOOL;
+    bDiscoveryCoverageFault : BOOL;
+    nDiscoveryRejectedObservations : UDINT;
+    nLostMessages : UDINT;
+    nHaOnlineReceived : UDINT;
+    nBirthRefreshStarted : UDINT;
+    nBirthRefreshCompleted : UDINT;
+    eLifecyclePhase : E_MqttLifecyclePhase := E_MqttLifecyclePhase.Disconnected;
 END_VAR
 VAR
     {attribute 'TcNoSymbol'}
     fbClient : FB_IotMqtt5Client;
+    fbClock : TON;
     fbMessage : FB_IotMqtt5Message;
     fbSubscribeProperties : FB_IotMqtt5SubscribeProperties;
+    fbDiscoverySubscribeProperties : FB_IotMqtt5SubscribeProperties;
     fbProtocol : FB_MqttLightProtocol;
+    fbDiscovery : FB_MqttDiscovery;
+    fbTopicMap : FB_MqttTopicMap;
     stConnect : ST_IotMqtt5Connect;
     sTopic : STRING(255);
     sPayload : STRING(3);
+    sDiscoveryPayload : STRING(2047);
     nTopicSize : UDINT;
     nPayloadSize : UDINT;
     nTopicCapacity : UINT;
     nPayloadCapacity : UDINT;
+    sBirthPayload : STRING(8);
+    sWillPayload : STRING(7) := 'offline';
+    sOnlinePayload : STRING(6) := 'online';
+    sAvailabilityTopic : STRING(255);
+    nDiscoveryLength : UDINT;
+    nPayloadScan : UDINT;
     nNextSubscription : DINT;
+    nClockEpochMs : ULINT;
+    nClockMs : ULINT;
+    etPreviousClock : TIME;
+    nActiveLightCount : DINT;
     nQueueScan : UINT;
     nLastLostMessages : UDINT;
     nRejectedTransportMessages : UDINT;
@@ -42,6 +71,30 @@ VAR
     bConfigValid : BOOL;
     bUsernamePresent : BOOL;
     bPasswordPresent : BOOL;
+    bOfflineAccepted : BOOL;
+    bOnlineAccepted : BOOL;
+    bBirthSubscribed : BOOL;
+    bDiscoverySubscribed : BOOL;
+    bDiscoveryTopic : BOOL;
+    bDiscoveryPayloadReceived : BOOL;
+    bCommandCoverageFence : BOOL;
+    bCatalogValid : BOOL;
+    bCatalogChanged : BOOL;
+    bCatalogInitialized : BOOL;
+    bDisconnectFenceAttempted : BOOL;
+    bNamespaceLocked : BOOL;
+    bConfiguredNamespace : BOOL;
+    nCatalogCount : DINT;
+    nCatalogUpperBound : DINT;
+    nPreviousCatalogCount : DINT;
+    nCatalogIndex : DINT;
+    nCatalogCompare : DINT;
+    aPreviousLocationId : ARRAY[1..16] OF STRING(16);
+    aPreviousLightId : ARRAY[1..16] OF STRING(16);
+    bCatalogMatch : BOOL;
+    bDiscoveryWasReady : BOOL;
+    bBirthRefreshActive : BOOL;
+    eObservedHaStatus : E_MqttObservedHaStatus := E_MqttObservedHaStatus.Unknown;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[]]></ST>
@@ -50,7 +103,7 @@ END_VAR]]></Declaration>
       <Declaration><![CDATA[METHOD PUBLIC PopCommand : ST_LightCommand]]></Declaration>
       <Implementation>
         <ST><![CDATA[PopCommand.bValid := FALSE;
-IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
+IF CanReceiveCommand() THEN
     PopCommand := fbProtocol.Pop();
 END_IF]]></ST>
       </Implementation>
@@ -60,15 +113,98 @@ END_IF]]></ST>
 VAR_IN_OUT
     aLights : ARRAY[*] OF ST_LightInfo;
 END_VAR
+VAR_INPUT
+    bCatalogReady : BOOL := TRUE;
+    nLightCount : DINT := -1;
+END_VAR
 VAR
     bPublishAccepted : BOOL;
+    nAttemptGeneration : UDINT;
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    sPlannedTopic : STRING(255);
+    sPlannedPayload : STRING(2047);
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[IF NOT (bConnected AND bQueueResetComplete AND bSubscriptionsAccepted) THEN
+        <ST><![CDATA[IF NOT CanPublishDiscovery() THEN
+    InvalidateReadiness();
     RETURN;
 END_IF
-fbProtocol.PlanState(aLights := aLights);
-IF fbProtocol.bPublishPending THEN
+IF nLightCount < -1 THEN
+    bReady := FALSE;
+    fbProtocol.bCatalogReady := FALSE;
+    IF bOnlineAccepted THEN FenceForDiscoveryChange(); END_IF
+    UpdateCommandReadiness();
+    RETURN;
+END_IF
+IF nLightCount = -1 THEN nLightCount := UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1; END_IF
+fbProtocol.bCatalogReady := bCatalogReady;
+fbProtocol.nLightCount := nLightCount;
+IF NOT bOfflineAccepted THEN
+    eLifecyclePhase := E_MqttLifecyclePhase.OfflineFence;
+    bReady := FALSE;
+    nAttemptGeneration := nLifecycleGeneration;
+    bPublishAccepted := fbClient.Publish(sTopic := sAvailabilityTopic, pPayload := ADR(sWillPayload), nPayloadSize := 7, eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+    HandleAvailabilityOutcome(nAttemptGeneration := nAttemptGeneration, bAccepted := bPublishAccepted, bOnline := FALSE, bPublishError := fbClient.bError, bActualConnected := fbClient.bConnected, bLogicalConnected := bConnected);
+    RETURN;
+END_IF
+IF NOT bCatalogReady THEN
+    IF bBirthRefreshActive THEN InvalidateReadiness(); END_IF
+    bReady := FALSE;
+    fbProtocol.bCatalogReady := FALSE;
+    fbProtocol.SetConnection(bNewReady := FALSE);
+    IF bOnlineAccepted THEN FenceForDiscoveryChange(); END_IF
+    UpdateCommandReadiness();
+    RETURN;
+END_IF
+IF NOT fbDiscovery.bReady AND bOnlineAccepted AND NOT bBirthRefreshActive THEN
+    FenceForDiscoveryChange();
+    RETURN;
+END_IF
+fbDiscovery.bCatalogReady := bCatalogReady;
+fbDiscovery.nLightCount := nLightCount;
+fbDiscovery.nNowMs := nClockMs;
+IF NOT ReconcileDiscoveryPlan(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sPlannedTopic => sPlannedTopic, sPlannedPayload => sPlannedPayload) THEN RETURN; END_IF
+IF NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN
+    bReady := FALSE;
+    UpdateCommandReadiness();
+END_IF
+IF bPlanPending THEN
+    eLifecyclePhase := E_MqttLifecyclePhase.Discovery;
+    nDiscoveryLength := SIZEOF(sPlannedPayload);
+    FOR nPayloadScan := 0 TO SIZEOF(sPlannedPayload) - 1 DO
+        IF sPlannedPayload[nPayloadScan] = 0 THEN
+            nDiscoveryLength := nPayloadScan;
+            EXIT;
+        END_IF
+    END_FOR
+        IF nDiscoveryLength < SIZEOF(fbDiscovery.sPayload) THEN
+            nAttemptGeneration := nLifecycleGeneration;
+            bPublishAccepted := fbClient.Publish(sTopic := sPlannedTopic, pPayload := ADR(sPlannedPayload), nPayloadSize := nDiscoveryLength, eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+        bError := fbClient.bError;
+        hrErrorCode := fbClient.hrErrorCode;
+        CheckPublishError();
+        IF bError OR NOT fbClient.bConnected THEN
+            ConfirmDiscoveryOutcome(bAccepted := bPublishAccepted, bPublishError := TRUE);
+            RETURN;
+        END_IF
+        IF nAttemptGeneration = nLifecycleGeneration THEN ConfirmDiscoveryOutcome(bAccepted := bPublishAccepted, bPublishError := FALSE); END_IF
+        RETURN;
+    END_IF
+    IF NOT bBirthRefreshActive THEN bReady := FALSE; END_IF
+    RETURN;
+END_IF
+IF NOT fbDiscovery.bReady THEN
+    IF NOT bBirthRefreshActive THEN bReady := FALSE; END_IF
+    RETURN;
+END_IF
+IF NOT CanPublishStateOnline() THEN
+    bReady := FALSE;
+    UpdateCommandReadiness();
+    RETURN;
+END_IF
+IF PlanCurrentState(aLights := aLights) THEN
+    nAttemptGeneration := nLifecycleGeneration;
     bPublishAccepted := fbClient.Publish(
             sTopic := fbProtocol.sStateTopic,
             pPayload := ADR(fbProtocol.sStatePayload),
@@ -77,18 +213,16 @@ IF fbProtocol.bPublishPending THEN
             bRetain := TRUE,
             bQueue := FALSE
         );
-    fbProtocol.ConfirmPublish(bAccepted := bPublishAccepted);
-    bError := fbClient.bError;
-    hrErrorCode := fbClient.hrErrorCode;
-    IF bError THEN
-        bConnected := FALSE;
-        bQueueResetComplete := FALSE;
-        bSubscriptionsAccepted := FALSE;
-        IF fbClient.bConnected THEN
-            bDisconnectForQueue := TRUE;
-        END_IF
-        fbProtocol.SetConnection(bNewReady := FALSE);
-    END_IF
+    CheckPublishError();
+    IF bError OR NOT fbClient.bConnected THEN RETURN; END_IF
+    IF nAttemptGeneration = nLifecycleGeneration THEN ConfirmStateOutcome(bAccepted := bPublishAccepted); END_IF
+    RETURN;
+END_IF
+IF NOT bOnlineAccepted AND CanPublishStateOnline() THEN
+    eLifecyclePhase := E_MqttLifecyclePhase.OnlineAnnouncement;
+    nAttemptGeneration := nLifecycleGeneration;
+    bPublishAccepted := fbClient.Publish(sTopic := sAvailabilityTopic, pPayload := ADR(sOnlinePayload), nPayloadSize := 6, eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+    HandleAvailabilityOutcome(nAttemptGeneration := nAttemptGeneration, bAccepted := bPublishAccepted, bOnline := TRUE, bPublishError := fbClient.bError, bActualConnected := fbClient.bConnected, bLogicalConnected := bConnected);
 END_IF]]></ST>
       </Implementation>
     </Method>
@@ -99,8 +233,16 @@ VAR_IN_OUT
     {attribute 'TcNoSymbol'}
     stConfig : ST_MqttConfig;
 END_VAR
-VAR_INPUT
+        VAR_INPUT
     bConfigurationReady : BOOL;
+    bCatalogReady : BOOL := TRUE;
+    nLightCount : DINT := -1;
+    nNowMs : ULINT := 0;
+END_VAR
+VAR
+    nAttemptGeneration : UDINT;
+    nDiscoveryScan : UDINT;
+    nDiscoveryCopiedLength : UDINT;
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[bConfigValid := bConfigurationReady
@@ -114,6 +256,81 @@ IF NOT bUsernamePresent OR NOT bPasswordPresent THEN
     bConfigValid := FALSE;
 END_IF
 bConfigurationError := bConfigurationReady AND NOT bConfigValid;
+fbProtocol.bTestNamespace := bTestNamespace;
+fbDiscovery.bTestNamespace := bTestNamespace;
+IF NOT bNamespaceLocked OR (bConfiguredNamespace = bTestNamespace) THEN
+    sAvailabilityTopic := fbTopicMap.BuildAvailabilityTopic(bTestNamespace := bTestNamespace);
+END_IF
+bCatalogValid := ValidateCatalogBounds(nLowerBound := LOWER_BOUND(aLights, 1), nUpperBound := UPPER_BOUND(aLights, 1), nCatalogCount => nCatalogCount);
+IF nLightCount < -1 THEN
+    nCatalogCount := -2;
+    bCatalogValid := FALSE;
+ELSIF nLightCount >= 0 THEN
+    nCatalogCount := nLightCount;
+    bCatalogValid := (nLightCount <= 16) AND (nLightCount <= UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1);
+END_IF
+nCatalogUpperBound := LOWER_BOUND(aLights, 1) + nCatalogCount - 1;
+fbDiscovery.bCatalogReady := bCatalogReady;
+fbDiscovery.nLightCount := nCatalogCount;
+UpdateElapsedClock();
+IF nNowMs = 0 THEN
+    nClockMs := nClockEpochMs + TIME_TO_ULINT(fbClock.ET);
+ELSE
+    nClockMs := nNowMs;
+END_IF
+fbDiscovery.nNowMs := nClockMs;
+IF bCatalogValid AND bCatalogReady THEN
+    FOR nCatalogIndex := LOWER_BOUND(aLights, 1) TO nCatalogUpperBound DO
+        IF NOT fbTopicMap.IsValidSegment(sSegment := aLights[nCatalogIndex].sLocationId) OR NOT fbTopicMap.IsValidSegment(sSegment := aLights[nCatalogIndex].sId) THEN
+            bCatalogValid := FALSE;
+        END_IF
+        FOR nCatalogCompare := LOWER_BOUND(aLights, 1) TO nCatalogIndex - 1 DO
+            IF (aLights[nCatalogIndex].sLocationId = aLights[nCatalogCompare].sLocationId) AND (aLights[nCatalogIndex].sId = aLights[nCatalogCompare].sId) THEN
+                bCatalogValid := FALSE;
+            END_IF
+        END_FOR
+    END_FOR
+END_IF
+IF bCatalogValid AND bCatalogReady THEN
+    bCatalogChanged := bCatalogInitialized AND (nCatalogCount <> nPreviousCatalogCount);
+    IF bCatalogInitialized AND NOT bCatalogChanged THEN
+        FOR nCatalogIndex := LOWER_BOUND(aLights, 1) TO nCatalogUpperBound DO
+            bCatalogMatch := FALSE;
+            FOR nCatalogCompare := 1 TO nPreviousCatalogCount DO
+                IF (aLights[nCatalogIndex].sLocationId = aPreviousLocationId[nCatalogCompare]) AND (aLights[nCatalogIndex].sId = aPreviousLightId[nCatalogCompare]) THEN
+                    bCatalogMatch := TRUE;
+                END_IF
+            END_FOR
+            IF NOT bCatalogMatch THEN bCatalogChanged := TRUE; END_IF
+        END_FOR
+    END_IF
+    IF bCatalogChanged THEN
+        FenceForDiscoveryChange();
+        nNextSubscription := LOWER_BOUND(aLights, 1);
+        bSubscriptionsAccepted := FALSE;
+    END_IF
+    nPreviousCatalogCount := nCatalogCount;
+    FOR nCatalogIndex := LOWER_BOUND(aLights, 1) TO nCatalogUpperBound DO
+        nCatalogCompare := nCatalogIndex - LOWER_BOUND(aLights, 1) + 1;
+        aPreviousLocationId[nCatalogCompare] := aLights[nCatalogIndex].sLocationId;
+        aPreviousLightId[nCatalogCompare] := aLights[nCatalogIndex].sId;
+    END_FOR
+    bCatalogInitialized := TRUE;
+END_IF
+fbDiscovery.UpdateCatalog(aLights := aLights);
+SyncCoverageFault();
+IF bCatalogValid AND bCatalogReady AND fbDiscovery.bCatalogChanged AND bBirthRefreshActive THEN FenceForDiscoveryChange(); END_IF
+IF bCatalogReady THEN bCatalogValid := bCatalogValid AND fbDiscovery.bValid; END_IF
+fbProtocol.bCatalogReady := bCatalogReady AND bCatalogValid;
+fbProtocol.nLightCount := nCatalogCount;
+IF bOnlineAccepted AND NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN FenceForDiscoveryChange(); END_IF
+bConfigValid := bConfigValid AND bCatalogValid;
+bConfigValid := bConfigValid AND (sWillPayload = 'offline') AND (LEN(sWillPayload) = 7) AND (INT_TO_UDINT(LEN(sWillPayload)) < SIZEOF(sWillPayload));
+bConfigurationError := bConfigurationReady AND NOT bConfigValid;
+IF bNamespaceLocked AND (bConfiguredNamespace <> bTestNamespace) THEN
+    bConfigValid := FALSE;
+    bConfigurationError := TRUE;
+END_IF
 
 IF bConfigValid AND NOT bClientConfigured THEN
     fbClient.stTLS.sCA := '';
@@ -131,22 +348,30 @@ IF bConfigValid AND NOT bClientConfigured THEN
         fbClient.stTLS.bNoServerCertCheck := FALSE;
     END_IF
     fbSubscribeProperties.nRetainHandling := 2;
-    stConnect.nSessionExpiryInterval := 0;
+    fbDiscoverySubscribeProperties.nRetainHandling := 0;
+    fbDiscoverySubscribeProperties.bNoLocal := FALSE;
+    fbClient.stWill.sTopic := sAvailabilityTopic;
+    fbClient.stWill.eQoS := TcIotMqttQos.AtLeastOnceDelivery;
+    fbClient.stWill.bRetain := TRUE;
+    (* Parameters are initialized locally; SetData has no documented success confirmation, and this does not prove broker or runtime acceptance. *)
+    fbClient.stWill.fbPayload.SetData(ADR(sWillPayload), 7);
     bClientConfigured := TRUE;
+    bConfiguredNamespace := bTestNamespace;
+    bNamespaceLocked := TRUE;
+    stConnect.nSessionExpiryInterval := 0;
 END_IF
 
 fbClient.stConnect := stConnect;
+IF fbClient.bConnected AND (NOT bConfigValid OR bDisconnectForQueue OR bSessionPresentRejected) AND NOT bDisconnectFenceAttempted THEN
+    bResetResult := fbClient.Publish(sTopic := sAvailabilityTopic, pPayload := ADR(sWillPayload), nPayloadSize := 7, eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+    bDisconnectFenceAttempted := TRUE;
+END_IF
 fbClient.Execute(bConnect := bConfigValid AND bClientConfigured AND NOT bDisconnectForQueue AND NOT bSessionPresentRejected);
 bConnected := fbClient.bConnected AND bConfigValid AND NOT bDisconnectForQueue AND NOT bSessionPresentRejected;
 bError := fbClient.bError;
 hrErrorCode := fbClient.hrErrorCode;
-IF bError THEN
-    bConnected := FALSE;
-    bQueueResetComplete := FALSE;
-    bSubscriptionsAccepted := FALSE;
-    IF fbClient.bConnected THEN
-        bDisconnectForQueue := TRUE;
-    END_IF
+IF (bError OR NOT fbClient.bConnected) AND (bConnected OR bWasConnected) THEN
+    HandleTransportLoss(bActualConnected := fbClient.bConnected, bForceDisconnect := bError);
 END_IF
 
 IF bConnected AND fbClient.fbConnAckProps.bSessionPresent THEN
@@ -165,10 +390,7 @@ END_IF
 
 IF bConnected THEN
     IF NOT bWasConnected THEN
-        bWasConnected := TRUE;
-        bQueueResetComplete := FALSE;
-        nNextSubscription := LOWER_BOUND(aLights, 1);
-        bSubscriptionsAccepted := FALSE;
+        BeginConnectedSession(aLights := aLights);
     END_IF
     IF NOT bQueueResetComplete THEN
         IF ResetMessageQueue() THEN
@@ -176,17 +398,19 @@ IF bConnected THEN
             bQueueResetComplete := TRUE;
         END_IF
     END_IF
-    IF (fbClient.fbMessageQueue.nLostMessages <> nLastLostMessages) OR (fbClient.fbMessageQueue.nQueuedMessages > 16) THEN
-        bQueueResetComplete := FALSE;
-        bDisconnectForQueue := TRUE;
-        bConnected := FALSE;
-        bSubscriptionsAccepted := FALSE;
+    IF fbClient.fbMessageQueue.nLostMessages <> nLastLostMessages THEN
+        nRejectedTransportMessages := nRejectedTransportMessages + (fbClient.fbMessageQueue.nLostMessages - nLastLostMessages);
+        nLastLostMessages := fbClient.fbMessageQueue.nLostMessages;
+        HandleQueueCoverageLoss();
     END_IF
 ELSE
     IF bWasConnected THEN
-        bWasConnected := FALSE;
-        bQueueResetComplete := FALSE;
-        bSubscriptionsAccepted := FALSE;
+        HandleTransportLoss(bActualConnected := fbClient.bConnected, bForceDisconnect := FALSE);
+        bBirthSubscribed := FALSE;
+        bDiscoverySubscribed := FALSE;
+    END_IF
+    IF NOT fbClient.bConnected THEN
+        bDisconnectFenceAttempted := FALSE;
     END_IF
     IF ResetMessageQueue() THEN
         nLastLostMessages := fbClient.fbMessageQueue.nLostMessages;
@@ -207,8 +431,16 @@ ELSE
     END_IF
 END_IF
 
-IF bConnected AND bQueueResetComplete AND NOT bSubscriptionsAccepted THEN
-    IF nNextSubscription <= UPPER_BOUND(aLights, 1) THEN
+IF bConnected AND bQueueResetComplete AND NOT bOfflineAccepted THEN
+    nAttemptGeneration := nLifecycleGeneration;
+    bResetResult := fbClient.Publish(sTopic := sAvailabilityTopic, pPayload := ADR(sWillPayload), nPayloadSize := 7, eQoS := TcIotMqttQos.AtLeastOnceDelivery, bRetain := TRUE, bQueue := FALSE);
+    HandleAvailabilityOutcome(nAttemptGeneration := nAttemptGeneration, bAccepted := bResetResult, bOnline := FALSE, bPublishError := fbClient.bError, bActualConnected := fbClient.bConnected, bLogicalConnected := bConnected);
+END_IF
+
+IF bConnected AND bQueueResetComplete AND bOfflineAccepted AND bCatalogReady AND bCatalogValid AND NOT bSubscriptionsAccepted THEN
+    nActiveLightCount := nCatalogCount;
+    IF nNextSubscription < LOWER_BOUND(aLights, 1) + nActiveLightCount THEN
+        fbSubscribeProperties.nRetainHandling := 2;
         sTopic := fbProtocol.BuildTopic(
             sLocationId := aLights[nNextSubscription].sLocationId,
             sLightId := aLights[nNextSubscription].sId,
@@ -222,6 +454,24 @@ IF bConnected AND bQueueResetComplete AND NOT bSubscriptionsAccepted THEN
         IF bSubscriptionAccepted THEN
             nNextSubscription := nNextSubscription + 1;
         END_IF
+    ELSIF NOT bBirthSubscribed THEN
+        sTopic := 'homeassistant/status';
+        fbSubscribeProperties.nRetainHandling := 0;
+        bSubscriptionAccepted := fbClient.Subscribe(sTopic := sTopic, eQoS := TcIotMqttQos.AtLeastOnceDelivery, pProps := fbSubscribeProperties.pSubscribeProperties);
+        IF bSubscriptionAccepted THEN
+            bBirthSubscribed := TRUE;
+        END_IF
+    ELSIF NOT bDiscoverySubscribed THEN
+        sTopic := fbTopicMap.BuildDiscoveryFilter(bTestNamespace := bTestNamespace);
+        fbDiscoverySubscribeProperties.nRetainHandling := 0;
+        fbDiscoverySubscribeProperties.bNoLocal := FALSE;
+        bSubscriptionAccepted := fbClient.Subscribe(sTopic := sTopic, eQoS := TcIotMqttQos.AtLeastOnceDelivery, pProps := fbDiscoverySubscribeProperties.pSubscribeProperties);
+        IF bSubscriptionAccepted THEN
+            bDiscoverySubscribed := TRUE;
+            bSubscriptionsAccepted := TRUE;
+            fbDiscovery.CoverageReplayStarted();
+            bCommandCoverageFence := fbDiscovery.bCoverageFault;
+        END_IF
     ELSE
         bSubscriptionsAccepted := TRUE;
     END_IF
@@ -229,16 +479,15 @@ END_IF
 
 bError := fbClient.bError;
 hrErrorCode := fbClient.hrErrorCode;
-IF bError THEN
-    bConnected := FALSE;
-    bQueueResetComplete := FALSE;
-    bSubscriptionsAccepted := FALSE;
-    IF fbClient.bConnected THEN
-        bDisconnectForQueue := TRUE;
-    END_IF
+IF (bError OR NOT fbClient.bConnected) AND (bConnected OR bWasConnected) THEN
+    HandleTransportLoss(bActualConnected := fbClient.bConnected, bForceDisconnect := bError);
 END_IF
 
-fbProtocol.SetConnection(bNewReady := bConnected AND bQueueResetComplete AND bSubscriptionsAccepted);
+IF (NOT bCatalogReady OR NOT bCatalogValid) AND bBirthRefreshActive THEN InvalidateReadiness(); END_IF
+IF NOT bCatalogReady OR NOT bCatalogValid OR (NOT fbDiscovery.bReady AND NOT bBirthRefreshActive) THEN
+    bReady := FALSE;
+END_IF
+UpdateCommandReadiness();
 
 IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
     nQueueScan := 0;
@@ -252,41 +501,412 @@ IF bConnected AND bQueueResetComplete AND bSubscriptionsAccepted THEN
         nPayloadSize := fbMessage.nPayloadSize;
         sTopic := '';
         sPayload := '';
-        IF (nTopicSize > 0) AND (nTopicSize < SIZEOF(sTopic))
-            AND ((nPayloadSize = 2) OR (nPayloadSize = 3)) THEN
+        bTopicReceived := FALSE;
+        IF (nTopicSize > 0) AND (nTopicSize <= SIZEOF(sTopic)) THEN
             nTopicCapacity := SIZEOF(sTopic);
             bTopicReceived := fbMessage.GetTopic(pTopic := ADR(sTopic), nTopicSize := nTopicCapacity);
-            nPayloadCapacity := SIZEOF(sPayload);
-            bPayloadReceived := fbMessage.GetPayload(
-                pPayload := ADR(sPayload),
-                nPayloadSize := nPayloadCapacity,
-                bSetNullTermination := TRUE
-            );
-            IF ValidateCopiedMessage(
-                bTopicReceived := bTopicReceived,
-                nTopicSize := nTopicSize,
-                sTopic := sTopic,
-                bPayloadReceived := bPayloadReceived,
-                nPayloadSize := nPayloadSize,
-                sPayload := sPayload
-            ) THEN
-                fbProtocol.Receive(
-                    sTopic := sTopic,
-                    sPayload := sPayload,
-                    nPayloadSize := nPayloadSize,
-                    aLights := aLights
-                );
+        END_IF
+        bTopicReceived := AcceptReceivedTopic(bTopicReceived := bTopicReceived, nTopicSize := nTopicSize, sTopic := sTopic);
+        IF bTopicReceived THEN
+            bDiscoveryTopic := bTopicReceived AND fbTopicMap.IsOwnDiscoveryTopic(bTestNamespace := bTestNamespace, sTopic := sTopic);
+            IF bDiscoveryTopic AND bCatalogReady AND bCatalogValid THEN
+                sDiscoveryPayload := '';
+                IF nPayloadSize = 0 THEN
+                    ObserveDiscovery(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 0, bPayloadValid := TRUE);
+                ELSIF nPayloadSize <= 2047 THEN
+                    nPayloadCapacity := SIZEOF(sDiscoveryPayload);
+                    bDiscoveryPayloadReceived := fbMessage.GetPayload(pPayload := ADR(sDiscoveryPayload), nPayloadSize := nPayloadCapacity, bSetNullTermination := TRUE);
+                    nDiscoveryCopiedLength := SIZEOF(sDiscoveryPayload);
+                    FOR nDiscoveryScan := 0 TO SIZEOF(sDiscoveryPayload) - 1 DO
+                        IF sDiscoveryPayload[nDiscoveryScan] = 0 THEN
+                            nDiscoveryCopiedLength := nDiscoveryScan;
+                            EXIT;
+                        END_IF
+                    END_FOR
+                    IF bDiscoveryPayloadReceived AND (nDiscoveryCopiedLength = nPayloadSize) THEN
+                        ObserveDiscovery(sObservedTopic := sTopic, pObservedPayload := ADR(sDiscoveryPayload), nObservedPayloadSize := nPayloadSize, bPayloadValid := TRUE);
+                    ELSE
+                        ObserveDiscovery(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 2048, bPayloadValid := FALSE);
+                    END_IF
+                ELSE
+                    ObserveDiscovery(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := nPayloadSize, bPayloadValid := TRUE);
+                END_IF
+            ELSIF bDiscoveryTopic THEN
+                nRejectedTransportMessages := nRejectedTransportMessages + 1;
+                fbDiscovery.RequestCoverageReplay();
+            ELSIF bTopicReceived AND (sTopic = 'homeassistant/status') AND ((nPayloadSize = 6) OR (nPayloadSize = 7)) THEN
+                sBirthPayload := '';
+                nPayloadCapacity := SIZEOF(sBirthPayload);
+                bPayloadReceived := fbMessage.GetPayload(pPayload := ADR(sBirthPayload), nPayloadSize := nPayloadCapacity, bSetNullTermination := TRUE);
+                IF bPayloadReceived AND ((sBirthPayload = 'online') OR (sBirthPayload = 'offline')) AND (INT_TO_UDINT(LEN(sBirthPayload)) = nPayloadSize) THEN
+                    ObserveHaStatus(sStatus := sBirthPayload, nStatusSize := nPayloadSize);
+                ELSE
+                    nRejectedTransportMessages := nRejectedTransportMessages + 1;
+                END_IF
+            ELSIF (nPayloadSize = 2) OR (nPayloadSize = 3) THEN
+                nPayloadCapacity := SIZEOF(sPayload);
+                bPayloadReceived := fbMessage.GetPayload(pPayload := ADR(sPayload), nPayloadSize := nPayloadCapacity, bSetNullTermination := TRUE);
+                IF ValidateCopiedMessage(bTopicReceived := bTopicReceived, nTopicSize := nTopicSize, sTopic := sTopic, bPayloadReceived := bPayloadReceived, nPayloadSize := nPayloadSize, sPayload := sPayload) THEN
+                    IF CanReceiveCommand() THEN
+                        ReceiveLightCommand(sCommandTopic := sTopic, sCommandPayload := sPayload, nCommandPayloadSize := nPayloadSize, aLights := aLights);
+                    ELSE
+                        nRejectedTransportMessages := nRejectedTransportMessages + 1;
+                    END_IF
+                ELSE
+                    nRejectedTransportMessages := nRejectedTransportMessages + 1;
+                END_IF
             ELSE
                 nRejectedTransportMessages := nRejectedTransportMessages + 1;
             END_IF
-        ELSE
-            nRejectedTransportMessages := nRejectedTransportMessages + 1;
         END_IF
     END_WHILE
 END_IF
 nRejectedQueue := fbProtocol.nRejectedQueue;
-nRejectedMessages := nRejectedTransportMessages + fbProtocol.nRejectedInput;]]></ST>
+nRejectedMessages := nRejectedTransportMessages + fbProtocol.nRejectedInput;
+nDiscoveryOrphanOverflow := fbDiscovery.nOrphanOverflow;
+bDiscoveryCoverageLost := fbDiscovery.bCoverageLost;
+bDiscoveryCoverageFault := fbDiscovery.bCoverageFault;
+nDiscoveryRejectedObservations := fbDiscovery.nRejectedObservations;
+nLostMessages := fbClient.fbMessageQueue.nLostMessages;]]></ST>
       </Implementation>
+    </Method>
+    <Method Name="InvalidateReadiness" Id="{b9571d0c-ea13-417c-a986-2c62c6c24915}">
+      <Declaration><![CDATA[METHOD PROTECTED InvalidateReadiness]]></Declaration>
+      <Implementation><ST><![CDATA[bReady := FALSE;
+ bBirthRefreshActive := FALSE;
+fbProtocol.SetConnection(bNewReady := FALSE);]]></ST></Implementation>
+    </Method>
+    <Method Name="FenceForDiscoveryChange" Id="{8b922b78-910e-46a0-8df2-a774f24454d1}">
+      <Declaration><![CDATA[METHOD PROTECTED FenceForDiscoveryChange]]></Declaration>
+      <Implementation><ST><![CDATA[nLifecycleGeneration := nLifecycleGeneration + 1;
+bBirthRefreshActive := FALSE;
+bReady := FALSE;
+bOnlineAccepted := FALSE;
+bOfflineAccepted := FALSE;
+eLifecyclePhase := E_MqttLifecyclePhase.OfflineFence;
+fbProtocol.RequestSnapshot();
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="ObserveDiscovery" Id="{7c13c9e1-3f2e-4c3b-9a5c-a225c3427bc1}">
+      <Declaration><![CDATA[METHOD PROTECTED ObserveDiscovery : BOOL
+VAR_INPUT
+    sObservedTopic : STRING(255);
+    pObservedPayload : POINTER TO BYTE;
+    nObservedPayloadSize : UDINT;
+    bPayloadValid : BOOL;
+END_VAR
+VAR
+    pObservationPayload : POINTER TO BYTE;
+    nObservationSize : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ObserveDiscovery := FALSE;
+ pObservationPayload := pObservedPayload;
+nObservationSize := nObservedPayloadSize;
+IF NOT bPayloadValid THEN
+    nRejectedTransportMessages := nRejectedTransportMessages + 1;
+    pObservationPayload := 0;
+    nObservationSize := 2048;
+END_IF
+bDiscoveryWasReady := fbDiscovery.bReady;
+fbDiscovery.Observe(sObservedTopic := sObservedTopic, pObservedPayload := pObservationPayload, nObservedPayloadSize := nObservationSize);
+SyncCoverageFault();
+IF bBirthRefreshActive AND fbDiscovery.bUnexpectedObservation THEN FenceForDiscoveryChange(); END_IF
+IF bOnlineAccepted AND NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN FenceForDiscoveryChange(); END_IF
+IF bDiscoveryWasReady AND NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN ObserveDiscovery := TRUE; END_IF
+IF NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN
+    bReady := FALSE;
+    UpdateCommandReadiness();
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="UpdateElapsedClock" Id="{0ac0f219-8177-4d2a-96ac-627c70d6f4fb}">
+      <Declaration><![CDATA[METHOD PROTECTED UpdateElapsedClock]]></Declaration>
+      <Implementation><ST><![CDATA[fbClock(IN := NOT fbClock.Q, PT := T#24D);
+IF fbClock.ET < etPreviousClock THEN
+    nClockEpochMs := nClockEpochMs + TIME_TO_ULINT(etPreviousClock);
+END_IF
+etPreviousClock := fbClock.ET;
+nClockMs := nClockEpochMs + TIME_TO_ULINT(fbClock.ET);]]></ST></Implementation>
+    </Method>
+    <Method Name="ValidateCatalogBounds" Id="{648274a8-82c2-4eed-81f2-220edfa01c2a}">
+      <Declaration><![CDATA[METHOD PROTECTED ValidateCatalogBounds : BOOL
+VAR_INPUT
+    nLowerBound : DINT;
+    nUpperBound : DINT;
+END_VAR
+VAR_OUTPUT
+    nCatalogCount : DINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nCatalogCount := nUpperBound - nLowerBound + 1;
+ValidateCatalogBounds := (nCatalogCount > 0) AND (nCatalogCount <= 16);]]></ST></Implementation>
+    </Method>
+    <Method Name="HandleTransportLoss" Id="{23a44df8-0c9a-4b96-9e4a-34d7dc1327e1}">
+      <Declaration><![CDATA[METHOD PROTECTED HandleTransportLoss
+VAR_INPUT
+    bActualConnected : BOOL;
+    bForceDisconnect : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[InvalidateReadiness();
+bConnected := FALSE;
+bQueueResetComplete := FALSE;
+bSubscriptionsAccepted := FALSE;
+bWasConnected := FALSE;
+bDiscoverySubscribed := FALSE;
+bCommandCoverageFence := TRUE;
+fbDiscovery.OnTransportLoss();
+eLifecyclePhase := E_MqttLifecyclePhase.Disconnected;
+IF bForceDisconnect AND bActualConnected THEN
+    bDisconnectForQueue := TRUE;
+    bDisconnectFenceAttempted := FALSE;
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="HandleQueueCoverageLoss" Id="{6df71016-79bb-47cd-9f03-fc73d3e19348}">
+      <Declaration><![CDATA[METHOD PROTECTED HandleQueueCoverageLoss]]></Declaration>
+      <Implementation><ST><![CDATA[bCommandCoverageFence := TRUE;
+IF bOnlineAccepted THEN
+    FenceForDiscoveryChange();
+ELSE
+    InvalidateReadiness();
+END_IF
+fbDiscovery.RequestCoverageReplay();
+SyncCoverageFault();]]></ST></Implementation>
+    </Method>
+    <Method Name="CanPublishDiscovery" Id="{f71c08cf-0906-4fe9-9b23-1fd813a88651}">
+      <Declaration><![CDATA[METHOD PROTECTED CanPublishDiscovery : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[CanPublishDiscovery := bConnected AND bQueueResetComplete AND bSubscriptionsAccepted
+    AND NOT bDisconnectForQueue AND NOT bSessionPresentRejected;]]></ST></Implementation>
+    </Method>
+    <Method Name="CanPublishStateOnline" Id="{2b3e55b4-4a78-4e0c-a73a-8ffdcfda4593}">
+      <Declaration><![CDATA[METHOD PROTECTED CanPublishStateOnline : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[CanPublishStateOnline := CanPublishDiscovery() AND NOT bCommandCoverageFence AND NOT fbDiscovery.bCoverageFault;]]></ST></Implementation>
+    </Method>
+    <Method Name="CanReceiveCommand" Id="{8bb7dca2-dbe8-459b-849a-6dfce1783b1c}">
+      <Declaration><![CDATA[METHOD PROTECTED CanReceiveCommand : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[CanReceiveCommand := bConnected AND bQueueResetComplete AND bSubscriptionsAccepted AND bReady AND NOT bDisconnectForQueue AND NOT bSessionPresentRejected AND NOT bCommandCoverageFence AND NOT fbDiscovery.bCoverageFault;]]></ST></Implementation>
+    </Method>
+    <Method Name="SyncCoverageFault" Id="{124cf3f2-c2d1-4ea4-a36e-7d8a6b8eb35a}">
+      <Declaration><![CDATA[METHOD PROTECTED SyncCoverageFault]]></Declaration>
+      <Implementation><ST><![CDATA[bDiscoveryCoverageLost := fbDiscovery.bCoverageLost;
+bDiscoveryCoverageFault := fbDiscovery.bCoverageFault;
+IF NOT fbDiscovery.bCoverageFault THEN RETURN; END_IF
+bCommandCoverageFence := TRUE;
+IF bOnlineAccepted OR bBirthRefreshActive THEN
+    FenceForDiscoveryChange();
+ELSE
+    InvalidateReadiness();
+END_IF
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="UpdateCommandReadiness" Id="{225275a9-dc78-4622-b0b7-270695bcacdc}">
+      <Declaration><![CDATA[METHOD PROTECTED UpdateCommandReadiness]]></Declaration>
+      <Implementation><ST><![CDATA[fbProtocol.SetConnection(bNewReady := bReady AND bConnected AND bQueueResetComplete AND bSubscriptionsAccepted AND NOT bDisconnectForQueue AND NOT bSessionPresentRejected AND NOT bCommandCoverageFence AND NOT fbDiscovery.bCoverageFault);]]></ST></Implementation>
+    </Method>
+    <Method Name="ReceiveLightCommand" Id="{d8220aab-8679-4e87-84d8-d482c3903572}">
+      <Declaration><![CDATA[METHOD PROTECTED ReceiveLightCommand : BOOL
+VAR_INPUT
+    sCommandTopic : STRING(255);
+    sCommandPayload : STRING(8);
+    nCommandPayloadSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbProtocol.bTestNamespace := bTestNamespace;
+ReceiveLightCommand := fbProtocol.Receive(sTopic := sCommandTopic, sPayload := sCommandPayload, nPayloadSize := nCommandPayloadSize, aLights := aLights);]]></ST></Implementation>
+    </Method>
+    <Method Name="BeginGeneration" Id="{4bbffdc8-d10d-45a3-98db-0bc1544f7255}">
+      <Declaration><![CDATA[METHOD PROTECTED BeginGeneration]]></Declaration>
+      <Implementation><ST><![CDATA[nLifecycleGeneration := nLifecycleGeneration + 1;
+InvalidateReadiness();
+bOfflineAccepted := FALSE;
+bOnlineAccepted := FALSE;
+eLifecyclePhase := E_MqttLifecyclePhase.OfflineFence;
+fbDiscovery.RequestReplay();
+fbProtocol.RequestSnapshot();]]></ST></Implementation>
+    </Method>
+    <Method Name="ReconcileDiscoveryPlan" Id="{79fc569a-f987-4c76-8ca4-edc0cf09262b}">
+      <Declaration><![CDATA[METHOD PROTECTED ReconcileDiscoveryPlan : BOOL
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR_OUTPUT
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    sPlannedTopic : STRING(255);
+    sPlannedPayload : STRING(2047);
+END_VAR
+VAR
+    bWasReady : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ReconcileDiscoveryPlan := FALSE;
+ bWasReady := fbDiscovery.bReady;
+fbDiscovery.UpdateCatalog(aLights := aLights);
+SyncCoverageFault();
+IF fbDiscovery.bValid AND fbDiscovery.bCatalogChanged AND bBirthRefreshActive THEN
+    FenceForDiscoveryChange();
+    bPlanValid := TRUE;
+    bPlanPending := FALSE;
+    sPlannedTopic := '';
+    sPlannedPayload := '';
+    RETURN;
+END_IF
+bPlanValid := fbDiscovery.bValid;
+IF NOT bPlanValid THEN
+    bReady := FALSE;
+    UpdateCommandReadiness();
+    IF bOnlineAccepted THEN FenceForDiscoveryChange(); END_IF
+    RETURN;
+END_IF
+IF bOnlineAccepted AND NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN
+    FenceForDiscoveryChange();
+    RETURN;
+END_IF
+IF bWasReady AND NOT fbDiscovery.bReady AND NOT bBirthRefreshActive THEN
+    bReady := FALSE;
+    UpdateCommandReadiness();
+    RETURN;
+END_IF
+fbDiscovery.Plan(aLights := aLights);
+bPlanValid := fbDiscovery.bValid;
+bPlanPending := fbDiscovery.bPublishPending;
+sPlannedTopic := fbDiscovery.sTopic;
+sPlannedPayload := fbDiscovery.sPayload;
+IF NOT bPlanValid THEN
+    bReady := FALSE;
+    UpdateCommandReadiness();
+    IF bOnlineAccepted THEN FenceForDiscoveryChange(); END_IF
+    RETURN;
+END_IF
+ReconcileDiscoveryPlan := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmDiscoveryOutcome" Id="{31cf4349-00cf-4e7e-89d5-45bfbb2c7401}">
+      <Declaration><![CDATA[METHOD PROTECTED ConfirmDiscoveryOutcome
+VAR_INPUT
+    bAccepted : BOOL;
+    bPublishError : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF bPublishError THEN
+    fbDiscovery.ConfirmAcceptedWithError(bAccepted := bAccepted);
+ELSE
+    fbDiscovery.ConfirmPublish(bAccepted := bAccepted);
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="PlanCurrentState" Id="{a3bf4882-e655-4a73-8cfe-20344c31b486}">
+      <Declaration><![CDATA[METHOD PROTECTED PlanCurrentState : BOOL
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbProtocol.PlanState(aLights := aLights);
+PlanCurrentState := fbProtocol.bPublishPending;
+IF PlanCurrentState THEN
+    IF bBirthRefreshActive OR NOT bOnlineAccepted THEN
+        eLifecyclePhase := E_MqttLifecyclePhase.StateSnapshot;
+    ELSE
+        eLifecyclePhase := E_MqttLifecyclePhase.Ready;
+    END_IF
+ELSIF bBirthRefreshActive THEN
+    bBirthRefreshActive := FALSE;
+    eLifecyclePhase := E_MqttLifecyclePhase.Ready;
+    IF fbDiscovery.bReady AND (nBirthRefreshCompleted < 16#FFFFFFFF) THEN
+        nBirthRefreshCompleted := nBirthRefreshCompleted + 1;
+    END_IF
+ELSIF bOnlineAccepted THEN
+    eLifecyclePhase := E_MqttLifecyclePhase.Ready;
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmStateOutcome" Id="{08dbef0b-2686-44af-a632-998e2e80dd8b}">
+      <Declaration><![CDATA[METHOD PROTECTED ConfirmStateOutcome
+VAR_INPUT
+    bAccepted : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbProtocol.ConfirmPublish(bAccepted := bAccepted);]]></ST></Implementation>
+    </Method>
+    <Method Name="QueuedCommandCount" Id="{47b2c6c5-4c6b-46a0-8d9c-c8f2fb7a9a21}">
+      <Declaration><![CDATA[METHOD PROTECTED QueuedCommandCount : UINT]]></Declaration>
+      <Implementation><ST><![CDATA[QueuedCommandCount := fbProtocol.nCount;]]></ST></Implementation>
+    </Method>
+    <Method Name="DiscoveryPendingOrphanCount" Id="{5f63b9ad-39c8-4b58-9ce9-9c92cc950275}">
+      <Declaration><![CDATA[METHOD PROTECTED DiscoveryPendingOrphanCount : UINT]]></Declaration>
+      <Implementation><ST><![CDATA[DiscoveryPendingOrphanCount := fbDiscovery.nPendingOrphanCount;]]></ST></Implementation>
+    </Method>
+    <Method Name="DiscoveryRetirementCount" Id="{73a3f76e-e5bd-4530-901a-a6b893177cb1}">
+      <Declaration><![CDATA[METHOD PROTECTED DiscoveryRetirementCount : UDINT]]></Declaration>
+      <Implementation><ST><![CDATA[DiscoveryRetirementCount := fbDiscovery.nOrphanRetirements;]]></ST></Implementation>
+    </Method>
+    <Method Name="BeginConnectedSession" Id="{b095cabd-68bd-4e58-a5ae-0e626e1b5fa1}">
+      <Declaration><![CDATA[METHOD PROTECTED BeginConnectedSession
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[bWasConnected := TRUE;
+bBirthSubscribed := FALSE;
+bDiscoverySubscribed := FALSE;
+bCommandCoverageFence := TRUE;
+eObservedHaStatus := E_MqttObservedHaStatus.Unknown;
+FenceForDiscoveryChange();
+fbDiscovery.ForceReplay();
+bQueueResetComplete := FALSE;
+nNextSubscription := LOWER_BOUND(aLights, 1);
+bSubscriptionsAccepted := FALSE;]]></ST></Implementation>
+    </Method>
+    <Method Name="HandleAvailabilityOutcome" Id="{6e6c977d-14a8-4b09-bc4d-a7e3c2b020c3}">
+      <Declaration><![CDATA[METHOD PROTECTED HandleAvailabilityOutcome : BOOL
+VAR_INPUT
+    nAttemptGeneration : UDINT;
+    bAccepted : BOOL;
+    bOnline : BOOL;
+    bPublishError : BOOL;
+    bActualConnected : BOOL;
+    bLogicalConnected : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[HandleAvailabilityOutcome := FALSE;
+IF bPublishError OR NOT bActualConnected OR NOT bLogicalConnected OR NOT bQueueResetComplete OR (bOnline AND NOT bSubscriptionsAccepted) OR bDisconnectForQueue OR bSessionPresentRejected OR (bOnline AND bCommandCoverageFence) OR (bOnline AND fbDiscovery.bCoverageFault) THEN
+    hrErrorCode := fbClient.hrErrorCode;
+    IF bPublishError OR NOT bActualConnected THEN
+        bError := bPublishError;
+        HandleTransportLoss(bActualConnected := bActualConnected, bForceDisconnect := bPublishError);
+    ELSE
+        InvalidateReadiness();
+    END_IF
+    RETURN;
+END_IF
+IF nAttemptGeneration <> nLifecycleGeneration THEN RETURN; END_IF
+IF bOnline THEN
+    IF eLifecyclePhase <> E_MqttLifecyclePhase.OnlineAnnouncement THEN RETURN; END_IF
+    IF bAccepted THEN
+        bOnlineAccepted := TRUE;
+        bReady := TRUE;
+        eLifecyclePhase := E_MqttLifecyclePhase.Ready;
+        HandleAvailabilityOutcome := TRUE;
+    END_IF
+ELSE
+    IF eLifecyclePhase <> E_MqttLifecyclePhase.OfflineFence THEN RETURN; END_IF
+    IF bAccepted THEN
+        bOfflineAccepted := TRUE;
+        eLifecyclePhase := E_MqttLifecyclePhase.Discovery;
+        HandleAvailabilityOutcome := TRUE;
+    END_IF
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="ObserveHaStatus" Id="{0434c7a6-778a-4147-8da8-267c6e4e3718}">
+      <Declaration><![CDATA[METHOD PROTECTED ObserveHaStatus
+VAR_INPUT
+    sStatus : STRING(8);
+    nStatusSize : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF nStatusSize <> INT_TO_UDINT(LEN(sStatus)) THEN RETURN; END_IF
+IF sStatus = 'offline' THEN
+    eObservedHaStatus := E_MqttObservedHaStatus.Offline;
+ELSIF sStatus = 'online' THEN
+    IF nHaOnlineReceived < 16#FFFFFFFF THEN nHaOnlineReceived := nHaOnlineReceived + 1; END_IF
+    eObservedHaStatus := E_MqttObservedHaStatus.Online;
+    IF bReady AND bOnlineAccepted AND (eLifecyclePhase = E_MqttLifecyclePhase.Ready) THEN
+        bBirthRefreshActive := TRUE;
+        IF nBirthRefreshStarted < 16#FFFFFFFF THEN nBirthRefreshStarted := nBirthRefreshStarted + 1; END_IF
+        fbDiscovery.RequestReplay();
+        fbProtocol.RequestSnapshot();
+        eLifecyclePhase := E_MqttLifecyclePhase.Discovery;
+    END_IF
+END_IF]]></ST></Implementation>
     </Method>
     <Method Name="ValidateCopiedMessage" Id="{2a13be2d-ec11-46b9-92a5-ed3cad3200c1}">
       <Declaration><![CDATA[METHOD PROTECTED ValidateCopiedMessage : BOOL
@@ -301,42 +921,15 @@ VAR_IN_OUT
     sPayload : STRING(3);
 END_VAR
 VAR
-    nTopicLength : UDINT;
     nPayloadLength : UDINT;
     nScan : UDINT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[ValidateCopiedMessage := FALSE;
-IF NOT bTopicReceived OR NOT bPayloadReceived THEN
-    RETURN;
-END_IF
-IF (nTopicSize = 0) OR (nTopicSize >= SIZEOF(sTopic)) THEN
+IF NOT ValidateReceivedTopic(bTopicReceived := bTopicReceived, nTopicSize := nTopicSize, sTopic := sTopic) OR NOT bPayloadReceived THEN
     RETURN;
 END_IF
 IF (nPayloadSize <> 2) AND (nPayloadSize <> 3) THEN
     RETURN;
-END_IF
-
-nTopicLength := SIZEOF(sTopic);
-FOR nScan := 0 TO SIZEOF(sTopic) - 1 DO
-    IF sTopic[nScan] = 0 THEN
-        nTopicLength := nScan;
-        EXIT;
-    END_IF
-END_FOR
-IF nTopicLength = SIZEOF(sTopic) THEN
-    RETURN;
-END_IF
-IF nTopicLength = 0 THEN
-    RETURN;
-END_IF
-IF nTopicSize <> nTopicLength THEN
-    (* Accept only exact content length or one verified final NUL; do not assume a universal size convention. *)
-    IF nTopicSize <> nTopicLength + 1 THEN
-        RETURN;
-    END_IF
-    IF sTopic[nTopicSize - 1] <> 0 THEN
-        RETURN;
-    END_IF
 END_IF
 
 nPayloadLength := SIZEOF(sPayload);
@@ -354,6 +947,59 @@ IF nPayloadLength <> nPayloadSize THEN
 END_IF
 ValidateCopiedMessage := TRUE;]]></ST>
       </Implementation>
+    </Method>
+    <Method Name="ValidateReceivedTopic" Id="{ed637246-3e3c-4a36-bb1c-1a48113a7281}">
+      <Declaration><![CDATA[METHOD PROTECTED ValidateReceivedTopic : BOOL
+VAR_INPUT
+    bTopicReceived : BOOL;
+    nTopicSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    sTopic : STRING(255);
+END_VAR
+VAR
+    nTopicLength : UDINT;
+    nScan : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ValidateReceivedTopic := FALSE;
+IF NOT bTopicReceived OR (nTopicSize = 0) OR (nTopicSize > SIZEOF(sTopic)) THEN RETURN; END_IF
+nTopicLength := SIZEOF(sTopic);
+FOR nScan := 0 TO SIZEOF(sTopic) - 1 DO
+    IF sTopic[nScan] = 0 THEN
+        nTopicLength := nScan;
+        EXIT;
+    END_IF
+END_FOR
+IF (nTopicLength = 0) OR (nTopicLength >= SIZEOF(sTopic)) THEN RETURN; END_IF
+IF nTopicSize = nTopicLength THEN
+    ValidateReceivedTopic := TRUE;
+ELSIF (nTopicSize = nTopicLength + 1) AND (nTopicSize <= SIZEOF(sTopic)) THEN
+    ValidateReceivedTopic := sTopic[nTopicSize - 1] = 0;
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="AcceptReceivedTopic" Id="{605601ef-6938-4b11-81c8-4a08f3e2dfcf}">
+      <Declaration><![CDATA[METHOD PROTECTED AcceptReceivedTopic : BOOL
+VAR_INPUT
+    bTopicReceived : BOOL;
+    nTopicSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    sTopic : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[AcceptReceivedTopic := ValidateReceivedTopic(bTopicReceived := bTopicReceived, nTopicSize := nTopicSize, sTopic := sTopic);
+IF NOT AcceptReceivedTopic THEN
+    nRejectedTransportMessages := nRejectedTransportMessages + 1;
+    HandleQueueCoverageLoss();
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="CheckPublishError" Id="{c55e634d-4623-4ed6-88bc-5f50b31e60c0}">
+      <Declaration><![CDATA[METHOD PROTECTED CheckPublishError]]></Declaration>
+      <Implementation><ST><![CDATA[bError := fbClient.bError;
+hrErrorCode := fbClient.hrErrorCode;
+IF bError OR NOT fbClient.bConnected THEN
+    fbProtocol.RequestSnapshot();
+    HandleTransportLoss(bActualConnected := fbClient.bConnected, bForceDisconnect := bError);
+END_IF]]></ST></Implementation>
     </Method>
     <Method Name="ResetMessageQueue" Id="{8f41c86c-50c0-4d24-9780-4c0a9caa05f8}">
       <Declaration><![CDATA[METHOD PROTECTED ResetMessageQueue : BOOL]]></Declaration>

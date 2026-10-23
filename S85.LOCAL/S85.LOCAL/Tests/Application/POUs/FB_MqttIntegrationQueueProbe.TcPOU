@@ -1,13 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_MqttIntegrationQueueProbe" Id="{dff8de19-a022-41af-9e1d-fc1f561c42ac}" SpecialFunc="None">
-    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueProbe EXTENDS S85Core.FB_MqttIntegration]]></Declaration>
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttIntegrationQueueProbe EXTENDS S85Core.FB_MqttIntegration
+VAR
+END_VAR]]></Declaration>
     <Implementation><ST><![CDATA[]]></ST></Implementation>
     <Method Name="ResetQueueForTest" Id="{4b4477f1-537c-4a85-9a82-38370ae9eb70}">
       <Declaration><![CDATA[METHOD PUBLIC ResetQueueForTest : BOOL]]></Declaration>
       <Implementation><ST><![CDATA[ResetQueueForTest := ResetMessageQueue();]]></ST></Implementation>
     </Method>
-    <Method Name="ValidateCopiedMessageForTest" Id="{c10cf147-5bdc-48de-8348-c74ea16522cf}">
+    <Method Name="AcceptReceivedTopicForTest" Id="{960e236e-ec7c-47e5-86d4-dd74c1b76fee}">
+      <Declaration><![CDATA[METHOD PUBLIC AcceptReceivedTopicForTest : BOOL
+VAR_INPUT
+    bTopicReceived : BOOL;
+    nTopicSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    sTopic : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[AcceptReceivedTopicForTest := AcceptReceivedTopic(bTopicReceived := bTopicReceived, nTopicSize := nTopicSize, sTopic := sTopic);]]></ST></Implementation>
+    </Method>
+  <Method Name="ValidateCopiedMessageForTest" Id="{c10cf147-5bdc-48de-8348-c74ea16522cf}">
       <Declaration><![CDATA[METHOD PUBLIC ValidateCopiedMessageForTest : BOOL
 VAR_INPUT
     bTopicReceived : BOOL;
@@ -27,6 +40,327 @@ END_VAR]]></Declaration>
     nPayloadSize := nPayloadSize,
     sPayload := sPayload
 );]]></ST></Implementation>
+    </Method>
+    <Method Name="ReceiveCommandForTest" Id="{4bdca2c7-1163-4db6-9799-127479f07bed}">
+      <Declaration><![CDATA[METHOD PUBLIC ReceiveCommandForTest : BOOL
+VAR_INPUT
+    sTopic : STRING(255);
+    sPayload : STRING(8);
+    nPayloadSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ReceiveCommandForTest := ReceiveLightCommand(sCommandTopic := sTopic, sCommandPayload := sPayload, nCommandPayloadSize := nPayloadSize, aLights := aLights);]]></ST></Implementation>
+    </Method>
+    <Method Name="ReceiveRoutedCommandForTest" Id="{a28416dd-a3d5-49ca-8b82-68bb2b62acba}">
+      <Declaration><![CDATA[METHOD PUBLIC ReceiveRoutedCommandForTest : BOOL
+VAR_INPUT
+    sTopic : STRING(255);
+    sPayload : STRING(8);
+    nPayloadSize : UDINT;
+END_VAR
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ReceiveRoutedCommandForTest := FALSE;
+IF CanReceiveCommand() THEN
+    ReceiveRoutedCommandForTest := ReceiveLightCommand(sCommandTopic := sTopic, sCommandPayload := sPayload, nCommandPayloadSize := nPayloadSize, aLights := aLights);
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="SetLifecyclePhaseForTest" Id="{ba7fa873-65c6-427b-b84e-7bd8862f9674}">
+      <Declaration><![CDATA[METHOD PUBLIC SetLifecyclePhaseForTest
+VAR_INPUT
+    ePhase : E_MqttLifecyclePhase;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[eLifecyclePhase := ePhase;]]></ST></Implementation>
+    </Method>
+    <Method Name="TransportLossForTest" Id="{3501a3ab-4c3c-49c8-a169-5dcb1df641ca}">
+      <Declaration><![CDATA[METHOD PUBLIC TransportLossForTest
+VAR_INPUT
+    bActualConnected : BOOL;
+    bForceDisconnect : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[HandleTransportLoss(bActualConnected := bActualConnected, bForceDisconnect := bForceDisconnect);
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="BeginGenerationForTest" Id="{1dd05aaf-e49d-4088-9f5a-48e59433807d}">
+      <Declaration><![CDATA[METHOD PUBLIC BeginGenerationForTest : UDINT]]></Declaration>
+      <Implementation><ST><![CDATA[BeginGeneration();
+BeginGenerationForTest := nLifecycleGeneration;
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="PlanSnapshotForTest" Id="{b6cc627f-5e49-4654-ac37-07e6c8bfce20}">
+      <Declaration><![CDATA[METHOD PUBLIC PlanSnapshotForTest : BOOL
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR_OUTPUT
+    sPayload : STRING(3);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbProtocol.PlanState(aLights := aLights);
+PlanSnapshotForTest := fbProtocol.bPublishPending;
+sPayload := fbProtocol.sStatePayload;]]></ST></Implementation>
+    </Method>
+    <Method Name="ReconcileMetadataForTest" Id="{80e23e77-e51f-4af0-b985-59056e2c25ca}">
+      <Declaration><![CDATA[METHOD PUBLIC ReconcileMetadataForTest : BOOL
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR_OUTPUT
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbDiscovery.bTestNamespace := bTestNamespace;
+ReconcileMetadataForTest := ReconcileDiscoveryPlan(
+    aLights := aLights,
+    bPlanValid => bPlanValid,
+    bPlanPending => bPlanPending,
+    sPlannedTopic => sTopic,
+    sPlannedPayload => sPayload
+);]]></ST></Implementation>
+    </Method>
+    <Method Name="ObserveDiscoveryForTest" Id="{2c38b6de-a231-4feb-a4c9-087b2f2f6081}">
+      <Declaration><![CDATA[METHOD PUBLIC ObserveDiscoveryForTest : BOOL
+VAR_INPUT
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    nPayloadSize : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbDiscovery.bTestNamespace := bTestNamespace;
+ObserveDiscoveryForTest := ObserveDiscovery(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := nPayloadSize, bPayloadValid := TRUE);
+]]></ST></Implementation>
+    </Method>
+    <Method Name="ObserveInvalidDiscoveryForTest" Id="{c6ce74f9-140e-437f-961e-a914ed084d7f}">
+      <Declaration><![CDATA[METHOD PUBLIC ObserveInvalidDiscoveryForTest
+VAR_INPUT
+    sTopic : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[fbDiscovery.bTestNamespace := bTestNamespace;
+ObserveDiscovery(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 2048, bPayloadValid := FALSE);
+]]></ST></Implementation>
+    </Method>
+    <Method Name="HandleQueueCoverageLossForTest" Id="{818e28a8-d625-4502-8887-dd8dcbeb22d8}">
+      <Declaration><![CDATA[METHOD PUBLIC HandleQueueCoverageLossForTest]]></Declaration>
+      <Implementation><ST><![CDATA[HandleQueueCoverageLoss();
+]]></ST></Implementation>
+    </Method>
+    <Method Name="PendingOrphanCountForTest" Id="{08db6514-21aa-4954-93bd-17aa255b7b31}">
+      <Declaration><![CDATA[METHOD PUBLIC PendingOrphanCountForTest : UINT]]></Declaration>
+      <Implementation><ST><![CDATA[PendingOrphanCountForTest := DiscoveryPendingOrphanCount();]]></ST></Implementation>
+    </Method>
+    <Method Name="RetirementCountForTest" Id="{a8d95e02-20bf-43d1-a3ba-a4d377e22594}">
+      <Declaration><![CDATA[METHOD PUBLIC RetirementCountForTest : UDINT]]></Declaration>
+      <Implementation><ST><![CDATA[RetirementCountForTest := DiscoveryRetirementCount();]]></ST></Implementation>
+    </Method>
+    <Method Name="CanPublishDiscoveryForTest" Id="{daf6e5b0-bd4f-4cb8-876a-6c70f73845bb}">
+      <Declaration><![CDATA[METHOD PUBLIC CanPublishDiscoveryForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[CanPublishDiscoveryForTest := CanPublishDiscovery();]]></ST></Implementation>
+    </Method>
+    <Method Name="CanPublishStateOnlineForTest" Id="{2265aa02-c8d5-4f5a-9311-6ee019ab6513}">
+      <Declaration><![CDATA[METHOD PUBLIC CanPublishStateOnlineForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[CanPublishStateOnlineForTest := CanPublishStateOnline();]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmDiscoveryForTest" Id="{6f9067d2-0f06-4814-8fce-964383a13e22}">
+      <Declaration><![CDATA[METHOD PUBLIC ConfirmDiscoveryForTest
+VAR_INPUT
+    bAccepted : BOOL;
+    bPublishError : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ConfirmDiscoveryOutcome(bAccepted := bAccepted, bPublishError := bPublishError);]]></ST></Implementation>
+    </Method>
+    <Method Name="QueueCountForTest" Id="{67398cb1-3150-4ba1-a17c-a927d6a367b3}">
+      <Declaration><![CDATA[METHOD PUBLIC QueueCountForTest : UINT]]></Declaration>
+      <Implementation><ST><![CDATA[QueueCountForTest := QueuedCommandCount();]]></ST></Implementation>
+    </Method>
+    <Method Name="ValidateCatalogBoundsForTest" Id="{e104f065-1c8b-437d-b75b-4f867a3fba2f}">
+      <Declaration><![CDATA[METHOD PUBLIC ValidateCatalogBoundsForTest : BOOL
+VAR_INPUT
+    nLowerBound : DINT;
+    nUpperBound : DINT;
+END_VAR
+VAR_OUTPUT
+    nCatalogCount : DINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ValidateCatalogBoundsForTest := ValidateCatalogBounds(
+    nLowerBound := nLowerBound,
+    nUpperBound := nUpperBound,
+    nCatalogCount => nCatalogCount
+);]]></ST></Implementation>
+    </Method>
+    <Method Name="OfflineFenceAcceptedForTest" Id="{6ee62fd4-c768-48c1-bac0-5d51e6d04143}">
+      <Declaration><![CDATA[METHOD PUBLIC OfflineFenceAcceptedForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[OfflineFenceAcceptedForTest := bOfflineAccepted;]]></ST></Implementation>
+    </Method>
+    <Method Name="PlanCurrentStateForTest" Id="{5c6e9c33-97f3-4692-a224-3d19e0cf392c}">
+      <Declaration><![CDATA[METHOD PUBLIC PlanCurrentStateForTest : BOOL
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[PlanCurrentStateForTest := PlanCurrentState(aLights := aLights);]]></ST></Implementation>
+    </Method>
+    <Method Name="RunPublishCycleForTest" Id="{e14ca79d-11bb-4191-ab16-bcaa28a600b4}">
+      <Declaration><![CDATA[METHOD PUBLIC RunPublishCycleForTest
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[PublishCycle(aLights := aLights);]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmStateForTest" Id="{1329fcec-65da-47fc-93ca-18ee3f0b73d6}">
+      <Declaration><![CDATA[METHOD PUBLIC ConfirmStateForTest
+VAR_INPUT
+    bAccepted : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ConfirmStateOutcome(bAccepted := bAccepted);]]></ST></Implementation>
+    </Method>
+    <Method Name="BeginConnectedSessionForTest" Id="{b3664591-0249-40e4-b7d1-f0e1609b7939}">
+      <Declaration><![CDATA[METHOD PUBLIC BeginConnectedSessionForTest : UDINT
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[BeginConnectedSession(aLights := aLights);
+BeginConnectedSessionForTest := nLifecycleGeneration;
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="ObserveHaStatusForTest" Id="{6ab3e7a2-875e-4ae2-9746-2cd54f1cf2a4}">
+      <Declaration><![CDATA[METHOD PUBLIC ObserveHaStatusForTest : UDINT
+VAR_INPUT
+    sStatus : STRING(8);
+    nStatusSize : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ObserveHaStatus(sStatus := sStatus, nStatusSize := nStatusSize);
+ObserveHaStatusForTest := nLifecycleGeneration;]]></ST></Implementation>
+    </Method>
+    <Method Name="SetBirthDiagnosticsForTest" Id="{1f1bb407-9e19-4cd2-8efc-54b51cc6cc9a}">
+      <Declaration><![CDATA[METHOD PUBLIC SetBirthDiagnosticsForTest
+VAR_INPUT
+    nOnline : UDINT;
+    nStarted : UDINT;
+    nCompleted : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nHaOnlineReceived := nOnline;
+nBirthRefreshStarted := nStarted;
+nBirthRefreshCompleted := nCompleted;]]></ST></Implementation>
+    </Method>
+    <Method Name="InjectAvailabilityOutcome" Id="{a3903309-f52c-49c2-b31d-bffc2a445831}">
+      <Declaration><![CDATA[METHOD PUBLIC InjectAvailabilityOutcome : BOOL
+VAR_INPUT
+    nGeneration : UDINT;
+    bAccepted : BOOL;
+    bOnline : BOOL;
+    bPublishError : BOOL;
+    bActualConnected : BOOL;
+    bLogicalConnected : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[InjectAvailabilityOutcome := HandleAvailabilityOutcome(
+    nAttemptGeneration := nGeneration,
+    bAccepted := bAccepted,
+    bOnline := bOnline,
+    bPublishError := bPublishError,
+    bActualConnected := bActualConnected,
+    bLogicalConnected := bLogicalConnected
+);]]></ST></Implementation>
+    </Method>
+    <Method Name="SetOutcomeContextForTest" Id="{850ba9d6-1ee9-43ab-bf66-cb752a8d8ebc}">
+      <Declaration><![CDATA[METHOD PUBLIC SetOutcomeContextForTest
+VAR_INPUT
+    ePhase : E_MqttLifecyclePhase;
+    bConnectedForTest : BOOL;
+    bQueueResetForTest : BOOL;
+    bSubscriptionsForTest : BOOL;
+    bDisconnectFenceForTest : BOOL;
+    bSessionRejectedForTest : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[eLifecyclePhase := ePhase;
+bConnected := bConnectedForTest;
+bQueueResetComplete := bQueueResetForTest;
+bSubscriptionsAccepted := bSubscriptionsForTest;
+bDisconnectForQueue := bDisconnectFenceForTest;
+bSessionPresentRejected := bSessionRejectedForTest;
+bError := FALSE;
+bReady := FALSE;
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="ClearCommandCoverageFenceForTest" Id="{a5469d93-4c24-44ad-a9bd-882d24b412aa}">
+      <Declaration><![CDATA[METHOD PUBLIC ClearCommandCoverageFenceForTest]]></Declaration>
+      <Implementation><ST><![CDATA[bCommandCoverageFence := FALSE;
+UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="SyncReadinessForTest" Id="{f80f94a6-8c50-4a0a-9f7f-7110f0527882}">
+      <Declaration><![CDATA[METHOD PUBLIC SyncReadinessForTest]]></Declaration>
+      <Implementation><ST><![CDATA[UpdateCommandReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="BirthRefreshActiveForTest" Id="{f3262e8d-e25f-4e0f-9c83-1b5309217f30}">
+      <Declaration><![CDATA[METHOD PUBLIC BirthRefreshActiveForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[BirthRefreshActiveForTest := bBirthRefreshActive;]]></ST></Implementation>
+    </Method>
+    <Method Name="DiscoveryReadyForTest" Id="{7ef8a440-97c3-49d5-99a6-7db9b31ca85a}">
+      <Declaration><![CDATA[METHOD PUBLIC DiscoveryReadyForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[DiscoveryReadyForTest := fbDiscovery.bReady;]]></ST></Implementation>
+    </Method>
+    <Method Name="OnlineAcceptedForTest" Id="{6a2b84e2-8ddb-481b-aeb8-317e8d80f6a6}">
+      <Declaration><![CDATA[METHOD PUBLIC OnlineAcceptedForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[OnlineAcceptedForTest := bOnlineAccepted;]]></ST></Implementation>
+    </Method>
+    <Method Name="ConnectedSessionStableForTest" Id="{516fd74e-cd4c-4554-b51a-f6e0b325c3a3}">
+      <Declaration><![CDATA[METHOD PUBLIC ConnectedSessionStableForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[ConnectedSessionStableForTest := bConnected AND bQueueResetComplete AND bSubscriptionsAccepted AND NOT bDisconnectForQueue AND NOT bSessionPresentRejected;]]></ST></Implementation>
+    </Method>
+    <Method Name="DisconnectForTest" Id="{0bd2c597-27d4-4eef-bd27-0e8379d2e8ea}">
+      <Declaration><![CDATA[METHOD PUBLIC DisconnectForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[DisconnectForTest := bDisconnectForQueue;]]></ST></Implementation>
+    </Method>
+    <Method Name="RecoveryRequestedForTest" Id="{bf21bca7-4bb2-474f-af83-01630f8e9c84}">
+      <Declaration><![CDATA[METHOD PUBLIC RecoveryRequestedForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[RecoveryRequestedForTest := fbDiscovery.bCoverageRecoveryRequested;]]></ST></Implementation>
+    </Method>
+    <Method Name="CoverageReplayStartedForTest" Id="{118d67c4-77b5-445c-8f30-075862790a22}">
+      <Declaration><![CDATA[METHOD PUBLIC CoverageReplayStartedForTest]]></Declaration>
+      <Implementation><ST><![CDATA[fbDiscovery.CoverageReplayStarted();
+SyncCoverageFault();]]></ST></Implementation>
+    </Method>
+    <Method Name="UnexpectedObservationForTest" Id="{c4494425-d336-4fea-9635-149c2d441f1c}">
+      <Declaration><![CDATA[METHOD PUBLIC UnexpectedObservationForTest : BOOL]]></Declaration>
+      <Implementation><ST><![CDATA[UnexpectedObservationForTest := fbDiscovery.bUnexpectedObservation;]]></ST></Implementation>
+    </Method>
+    <Method Name="EstablishReadyForBirthTest" Id="{e0d06d59-3f8f-423b-8728-5d20962d4e07}">
+      <Declaration><![CDATA[METHOD PUBLIC EstablishReadyForBirthTest : BOOL
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR
+    bPlanValid : BOOL;
+    bPlanPending : BOOL;
+    sPlannedTopic : STRING(255);
+    sPlannedPayload : STRING(2047);
+    bStatePending : BOOL;
+    nPayloadLength : UDINT;
+    nPayloadScan : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[EstablishReadyForBirthTest := FALSE;
+fbDiscovery.bTestNamespace := bTestNamespace;
+IF NOT ReconcileDiscoveryPlan(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sPlannedTopic => sPlannedTopic, sPlannedPayload => sPlannedPayload) THEN RETURN; END_IF
+IF bPlanPending THEN
+    ConfirmDiscoveryOutcome(bAccepted := TRUE, bPublishError := FALSE);
+    nPayloadLength := SIZEOF(sPlannedPayload);
+    FOR nPayloadScan := 0 TO SIZEOF(sPlannedPayload) - 1 DO
+        IF sPlannedPayload[nPayloadScan] = 0 THEN nPayloadLength := nPayloadScan; EXIT; END_IF
+    END_FOR
+    ObserveDiscovery(sObservedTopic := sPlannedTopic, pObservedPayload := ADR(sPlannedPayload), nObservedPayloadSize := nPayloadLength, bPayloadValid := TRUE);
+END_IF
+IF NOT ReconcileDiscoveryPlan(aLights := aLights, bPlanValid => bPlanValid, bPlanPending => bPlanPending, sPlannedTopic => sPlannedTopic, sPlannedPayload => sPlannedPayload) OR NOT fbDiscovery.bReady THEN RETURN; END_IF
+SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OfflineFence, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := FALSE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+IF NOT InjectAvailabilityOutcome(nGeneration := nLifecycleGeneration, bAccepted := TRUE, bOnline := FALSE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE) THEN RETURN; END_IF
+IF NOT PlanCurrentState(aLights := aLights) THEN RETURN; END_IF
+ConfirmStateOutcome(bAccepted := TRUE);
+bStatePending := PlanCurrentState(aLights := aLights);
+IF bStatePending THEN RETURN; END_IF
+SetOutcomeContextForTest(ePhase := E_MqttLifecyclePhase.OnlineAnnouncement, bConnectedForTest := TRUE, bQueueResetForTest := TRUE, bSubscriptionsForTest := TRUE, bDisconnectFenceForTest := FALSE, bSessionRejectedForTest := FALSE);
+IF NOT InjectAvailabilityOutcome(nGeneration := nLifecycleGeneration, bAccepted := TRUE, bOnline := TRUE, bPublishError := FALSE, bActualConnected := TRUE, bLogicalConnected := TRUE) THEN RETURN; END_IF
+UpdateCommandReadiness();
+EstablishReadyForBirthTest := TRUE;]]></ST></Implementation>
     </Method>
   </POU>
 </TcPlcObject>

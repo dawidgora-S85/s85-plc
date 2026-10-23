@@ -1,0 +1,565 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttDiscoveryTests" Id="{c6d17f2e-1c60-4f05-96be-c3edcb2a2f23}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttDiscoveryTests EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[// Large fixtures persist per method and execute once; use a fresh suite instance for each test run.
+ObservedSettlementAndRetry();
+CatalogReadinessAndObservationValidation();
+OrphanIdentityAndRename();
+HistoricalReplayCapacity();
+ReconnectAndDelayedEcho();
+ContradictoryAndReplayCoalescing();
+RejectedFairnessAndPayloadBounds();
+ReplayProgressCoalesces();
+ForceReplayInvalidatesObservedDesired();
+JsonEscapingAndMetadataBounds();
+InvalidCatalogsFailClosed();
+NamespaceAndSnapshotPreserveFifo();
+FullCapacityTombstoneOwnership();
+PendingRenameAndIdentityChangeObservations();]]></ST></Implementation>
+    <Method Name="ObservedSettlementAndRetry" Id="{8c2d868b-88de-4c71-a604-5cf215606113}">
+      <Declaration><![CDATA[METHOD PRIVATE ObservedSettlementAndRetry
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    nLength : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Broker observation alone settles and retry uses deterministic time');
+IF TcUnit.IS_TEST_FINISHED('Broker observation alone settles and retry uses deterministic time') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Ceiling';
+fb.bTestNamespace := TRUE; fb.nNowMs := 100; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid AND fb.bPublishPending AND NOT fb.bReady, Message := 'Initial config pending and unsettled');
+sTopic := fb.sTopic; sPayload := fb.sPayload; nLength := PayloadByteLength(sValue := sPayload);
+fb.ConfirmPublish(bAccepted := TRUE); fb.Plan(aLights := a);
+AssertTrue(Condition := NOT fb.bReady AND NOT fb.bPublishPending, Message := 'Accepted send without echo remains unsettled during backoff');
+fb.nNowMs := 1100; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopic, Message := 'Retry becomes eligible at explicit deadline');
+fb.ConfirmAcceptedWithError(bAccepted := TRUE); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Lost delivery result cannot settle');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := nLength);
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady AND NOT fb.bPublishPending, Message := 'Exact broker payload observation settles');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="CatalogReadinessAndObservationValidation" Id="{bd725f84-05fb-4d3d-8fc6-6977742b85e9}">
+      <Declaration><![CDATA[METHOD PRIVATE CatalogReadinessAndObservationValidation
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Ready empty catalog differs from unready invalid and malformed observations are rejected');
+IF TcUnit.IS_TEST_FINISHED('Ready empty catalog differs from unready invalid and malformed observations are rejected') THEN RETURN; END_IF
+fb.bTestNamespace := TRUE; fb.nLightCount := 0; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid AND fb.bReady, Message := 'Ready zero-count catalog is authoritative empty');
+fb.bCatalogReady := FALSE; fb.Plan(aLights := a);
+AssertTrue(Condition := NOT fb.bReady AND NOT fb.bPublishPending, Message := 'Unready catalog cannot claim settled readiness');
+fb.bCatalogReady := TRUE; fb.nLightCount := -2; fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bValid OR fb.bReady, Message := 'Invalid explicit count fails closed');
+fb.Observe(sObservedTopic := 'homeassistant/device/s85/s85_482E30312D3039_light_6D61696E/config', pObservedPayload := 0, nObservedPayloadSize := 0);
+fb.Observe(sObservedTopic := 'homeassistant/device/s85_test/+/config', pObservedPayload := 0, nObservedPayloadSize := 0);
+fb.Observe(sObservedTopic := 'homeassistant/device/s85_test/object/config/extra', pObservedPayload := 0, nObservedPayloadSize := 0);
+fb.Observe(sObservedTopic := 'homeassistant/device/s85_test/object.with:colon/config', pObservedPayload := ADR(a[1].sName), nObservedPayloadSize := 1);
+AssertTrue(Condition := fb.nRejectedObservations >= 3, Message := 'Foreign namespace, wildcard and extra level are rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="OrphanIdentityAndRename" Id="{b488d9e5-3e4d-4c6a-aea5-5fa6ae292734}">
+      <Declaration><![CDATA[METHOD PRIVATE OrphanIdentityAndRename
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Rename preserves identity and observed removal becomes tombstone until empty echo');
+IF TcUnit.IS_TEST_FINISHED('Rename preserves identity and observed removal becomes tombstone until empty echo') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Ceiling';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a); sTopic := fb.sTopic; sPayload := fb.sPayload;
+AssertTrue(Condition := PayloadByteLength(sValue := sPayload) > 255, Message := 'Discovery payload exercises the full-buffer observation path');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload)); fb.Plan(aLights := a);
+a[1].sName := 'Renamed'; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopic AND fb.sPayload <> sPayload, Message := 'Rename retains topic identity and updates payload');
+sPayload := fb.sPayload; fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload));
+a[1].sName := 'Ceiling'; fb.Plan(aLights := a); sPayload := fb.sPayload;
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload));
+fb.nLightCount := 0; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopic AND LEN(fb.sPayload) = 0, Message := 'Observed removed identity is tombstoned');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Tombstone acceptance does not erase orphan');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 0); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Empty broker observation retires tombstone');
+fb.Observe(sObservedTopic := 'homeassistant/device/s85_test/historical/config', pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload));
+fb.Plan(aLights := a); AssertFalse(Condition := fb.bReady, Message := 'Known historical value is unsettled');
+fb.bCatalogReady := FALSE; fb.Plan(aLights := a);
+AssertTrue(Condition := NOT fb.bPublishPending AND NOT fb.bReady, Message := 'Unready catalog does not schedule known orphan cleanup');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="HistoricalReplayCapacity" Id="{531fdac1-b683-4d25-aab1-9e4e1bdd1d6b}">
+      <Declaration><![CDATA[METHOD PRIVATE HistoricalReplayCapacity
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sDesiredTopic : STRING(255);
+    sPayload : STRING(2047);
+    sDesiredPayload : STRING(2047);
+    i : INT;
+    j : INT;
+    nDrained : INT;
+    aRetained : ARRAY[1..33] OF BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Historical fixed-order replay admits bounded orphan work and reports overflow');
+IF TcUnit.IS_TEST_FINISHED('Historical fixed-order replay admits bounded orphan work and reports overflow') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'current'; a[1].sName := 'Current';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a); sTopic := fb.sTopic; sPayload := fb.sPayload;
+sDesiredTopic := sTopic; sDesiredPayload := sPayload;
+AssertTrue(Condition := PayloadByteLength(sValue := sPayload) > 255, Message := 'Discovery payload exercises the full-buffer observation path');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload)); fb.Plan(aLights := a);
+FOR i := 1 TO 33 DO
+    sTopic := CONCAT('homeassistant/device/s85_test/legacy', INT_TO_STRING(i)); sTopic := CONCAT(sTopic, '/config');
+    aRetained[i] := TRUE;
+    fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := 1);
+END_FOR
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.nOrphanOverflow > 0 AND fb.bCoverageRecoveryRequested, Message := 'More than 32 historical values requests coverage recovery');
+AssertFalse(Condition := fb.bReady, Message := 'Admitted historical cleanup remains unsettled');
+fb.nNowMs := 100000; nDrained := 0;
+FOR i := 1 TO 32 DO
+    fb.Plan(aLights := a);
+    IF fb.bPublishPending AND LEN(fb.sPayload) = 0 THEN
+        sTopic := fb.sTopic; fb.ConfirmPublish(bAccepted := TRUE);
+        fb.Observe(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 0);
+        FOR j := 1 TO 33 DO
+            IF CONCAT(CONCAT('homeassistant/device/s85_test/legacy', INT_TO_STRING(j)), '/config') = sTopic THEN aRetained[j] := FALSE; END_IF
+        END_FOR
+        nDrained := nDrained + 1;
+    END_IF
+    fb.nNowMs := fb.nNowMs + 120000;
+END_FOR
+AssertTrue(Condition := nDrained = 32, Message := 'All admitted historical tombstones receive publish and empty echo');
+fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Detected overflow remains latched after admitted cleanup drains');
+AssertTrue(Condition := aRetained[33], Message := 'Overflowed 33rd item remains in simulated retained replay');
+fb.CoverageReplayStarted();
+(* A coverage replay invalidates desired observations as well as orphan coverage. *)
+fb.Observe(sObservedTopic := sDesiredTopic, pObservedPayload := ADR(sDesiredPayload), nObservedPayloadSize := PayloadByteLength(sValue := sDesiredPayload));
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND (fb.sTopic = sDesiredTopic), Message := 'Coverage replay requires a fresh desired publication even after its matching early echo');
+fb.ConfirmPublish(bAccepted := TRUE);
+fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady OR fb.bPublishPending, Message := 'Accepted desired publication waits for its post-publish observation');
+fb.Observe(sObservedTopic := sDesiredTopic, pObservedPayload := ADR(sDesiredPayload), nObservedPayloadSize := PayloadByteLength(sValue := sDesiredPayload));
+fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Replay cannot clear the detected coverage fault');
+sTopic := 'homeassistant/device/s85_test/legacy33/config'; sPayload := 'retained';
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload));
+fb.nNowMs := fb.nNowMs + 120000; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopic, Message := 'Fresh bounded replay admits overflowed 33rd identity');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Observe(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 0);
+aRetained[33] := FALSE; fb.Plan(aLights := a);
+AssertTrue(Condition := NOT aRetained[33] AND NOT fb.bReady, Message := 'Cleanup may continue but cannot establish complete coverage after overflow');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ReconnectAndDelayedEcho" Id="{6dc97f43-177a-4239-a6c2-c82bdbb8af6f}">
+      <Declaration><![CDATA[METHOD PRIVATE ReconnectAndDelayedEcho
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    i : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Reconnect preserves orphan work and late empty echo reopens desired');
+IF TcUnit.IS_TEST_FINISHED('Reconnect preserves orphan work and late empty echo reopens desired') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Lamp';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a); sTopic := fb.sTopic; sPayload := fb.sPayload;
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload)); fb.Plan(aLights := a);
+fb.nLightCount := 0; fb.Plan(aLights := a); AssertTrue(Condition := fb.bPublishPending AND LEN(fb.sPayload) = 0, Message := 'Removal schedules tombstone');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Accepted delivered tombstone without echo remains pending');
+ fb.OnTransportLoss(); fb.ForceReplay(); fb.Plan(aLights := a);
+AssertTrue(Condition := NOT fb.bReady, Message := 'Reconnect coverage request preserves orphan');
+fb.nLightCount := 1; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopic AND LEN(fb.sPayload) > 0, Message := 'Readded desired topic supersedes unsent tombstone');
+sPayload := fb.sPayload;
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := 0, nObservedPayloadSize := 0); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Delayed empty retained value contradicts and reopens desired work');
+fb.nNowMs := 2000; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending, Message := 'Contradiction makes desired publish eligible');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload)); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Exact repaired value settles after reconnect');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ContradictoryAndReplayCoalescing" Id="{9f2a5f8d-f459-4d5b-8b82-b4cc9880f117}">
+      <Declaration><![CDATA[METHOD PRIVATE ContradictoryAndReplayCoalescing
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+    sWrong : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Contradictory observations reopen desired and replay requests coalesce');
+IF TcUnit.IS_TEST_FINISHED('Contradictory observations reopen desired and replay requests coalesce') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Lamp';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a); sTopic := fb.sTopic; sPayload := fb.sPayload;
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload)); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Matching current retained value settles');
+sWrong := 'contradictory'; fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sWrong), nObservedPayloadSize := PayloadByteLength(sValue := sWrong)); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Contradictory duplicate reopens desired work');
+AssertTrue(Condition := fb.bPublishPending, Message := 'Settled-to-dirty transition makes repair immediately eligible');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sWrong), nObservedPayloadSize := PayloadByteLength(sValue := sWrong)); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bPublishPending, Message := 'Repeated contradictory observation retains repair retry backoff');
+fb.nNowMs := 999; fb.Plan(aLights := a); AssertFalse(Condition := fb.bPublishPending, Message := 'Repair retry remains unavailable before deadline');
+fb.RequestReplay(); fb.RequestReplay(); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending, Message := 'New replay resets retry eligibility and coalesced request does not undo it');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sWrong), nObservedPayloadSize := PayloadByteLength(sValue := sWrong));
+fb.nNowMs := 1998; fb.Plan(aLights := a); AssertFalse(Condition := fb.bPublishPending, Message := 'Coalesced replay preserves retry backoff after its first fresh publish');
+fb.nNowMs := 1999; fb.Plan(aLights := a); AssertTrue(Condition := fb.bPublishPending, Message := 'Fresh replay repair retries at its explicit deadline');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPayload)); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Matching duplicate after coalesced replay settles work');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="RejectedFairnessAndPayloadBounds" Id="{dfcd2ea1-3012-4f3f-9be2-1e5c632a223e}">
+      <Declaration><![CDATA[METHOD PRIVATE RejectedFairnessAndPayloadBounds
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..2] OF ST_LightInfo;
+    sFirst : STRING(255);
+    sSecond : STRING(255);
+    sPayload : STRING(2047);
+    aBad : ARRAY[0..2047] OF BYTE;
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Rejected attempt fairness and foreign oversized payloads cannot match');
+IF TcUnit.IS_TEST_FINISHED('Rejected attempt fairness and foreign oversized payloads cannot match') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'one'; a[1].sName := 'One';
+a[2].sLocationId := 'H.01-09'; a[2].sLocationName := 'Workshop'; a[2].sId := 'two'; a[2].sName := 'Two';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a); sFirst := fb.sTopic; fb.ConfirmPublish(bAccepted := FALSE);
+fb.Plan(aLights := a); sSecond := fb.sTopic;
+AssertTrue(Condition := sFirst <> sSecond, Message := 'Rejected slot advances fair cursor to next desired slot');
+fb.Observe(sObservedTopic := 'homeassistant/device/s85/wrong/config', pObservedPayload := ADR(aBad[0]), nObservedPayloadSize := 1);
+fb.Observe(sObservedTopic := 'homeassistant/device/s85_test/s85_test_482E30312D3039_light_6F6E65/config', pObservedPayload := ADR(aBad[0]), nObservedPayloadSize := 2048);
+FOR i := 0 TO 2047 DO aBad[i] := 65; END_FOR
+fb.Observe(sObservedTopic := sFirst, pObservedPayload := ADR(aBad[0]), nObservedPayloadSize := 2048);
+fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Foreign and oversized values cannot falsely settle desired entry');
+AssertTrue(Condition := fb.nRejectedObservations > 0, Message := 'Foreign namespace observation counted as rejected');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ReplayProgressCoalesces" Id="{28b7b3ef-bc5b-46db-96c4-95052cd95945}">
+      <Declaration><![CDATA[METHOD PRIVATE ReplayProgressCoalesces
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..2] OF ST_LightInfo;
+    sTopicA : STRING(255);
+    sTopicB : STRING(255);
+    sPayloadA : STRING(2047);
+    sPayloadB : STRING(2047);
+    sWrong : STRING(2047);
+    i : INT;
+    nNowMs : ULINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Refresh invalidates settled entries but duplicate active refresh preserves progress');
+IF TcUnit.IS_TEST_FINISHED('Refresh invalidates settled entries but duplicate active refresh preserves progress') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'one'; a[1].sName := 'One';
+a[2].sLocationId := 'H.01-09'; a[2].sLocationName := 'Workshop'; a[2].sId := 'two'; a[2].sName := 'Two';
+fb.bTestNamespace := TRUE;
+fb.nNowMs := 100;
+FOR i := 1 TO 2 DO
+    fb.Plan(aLights := a); fb.ConfirmPublish(bAccepted := TRUE);
+    IF i = 1 THEN sTopicA := fb.sTopic; sPayloadA := fb.sPayload;
+    ELSE sTopicB := fb.sTopic; sPayloadB := fb.sPayload; END_IF
+    fb.Observe(sObservedTopic := fb.sTopic, pObservedPayload := ADR(fb.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fb.sPayload));
+END_FOR
+fb.Plan(aLights := a); AssertTrue(Condition := fb.bReady, Message := 'Both exact broker observations settle');
+fb.nNowMs := 500; sWrong := 'bad'; fb.Observe(sObservedTopic := sTopicB, pObservedPayload := ADR(sWrong), nObservedPayloadSize := PayloadByteLength(sValue := sWrong));
+fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'B becomes dirty while A remains observed');
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopicB, Message := 'Contradictory B receives repair attempt at 500 ms');
+fb.ConfirmPublish(bAccepted := TRUE);
+fb.nNowMs := 1100; fb.RequestReplay(); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopicA, Message := 'First replay publication follows the fair cursor to settled A');
+fb.ConfirmPublish(bAccepted := TRUE);
+fb.Observe(sObservedTopic := sTopicA, pObservedPayload := ADR(sPayloadA), nObservedPayloadSize := PayloadByteLength(sValue := sPayloadA));
+AssertFalse(Condition := fb.bReady, Message := 'A observed again but B remains contradictory');
+fb.RequestReplay(); fb.RequestReplay(); fb.nNowMs := 1499; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopicB, Message := 'B fresh publication is selected after coalesced requests preserve replay progress');
+fb.ConfirmPublish(bAccepted := TRUE); fb.RequestReplay(); fb.RequestReplay();
+fb.nNowMs := 2498; fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bPublishPending, Message := 'Coalesced requests do not reset active B retry backoff');
+fb.nNowMs := 2499; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopicB, Message := 'B retries at the deadline without restarting replay progress');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="ForceReplayInvalidatesObservedDesired" Id="{0e583f87-490e-45ab-93b3-60e5737716fa}">
+      <Declaration><![CDATA[METHOD PRIVATE ForceReplayInvalidatesObservedDesired
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..2] OF ST_LightInfo;
+    sTopicA : STRING(255);
+    sTopicB : STRING(255);
+    sPayloadA : STRING(2047);
+    sPayloadB : STRING(2047);
+    i : INT;
+    sPublishTopic : STRING(255);
+    sPublishPayload : STRING(2047);
+    sWrong : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('ForceReplay invalidates observed desired state deterministically');
+IF TcUnit.IS_TEST_FINISHED('ForceReplay invalidates observed desired state deterministically') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'one'; a[1].sName := 'One';
+a[2].sLocationId := 'H.01-09'; a[2].sLocationName := 'Workshop'; a[2].sId := 'two'; a[2].sName := 'Two';
+fb.bTestNamespace := TRUE;
+FOR i := 1 TO 2 DO
+    fb.Plan(aLights := a);
+    IF i = 1 THEN sTopicA := fb.sTopic; sPayloadA := fb.sPayload; ELSE sTopicB := fb.sTopic; sPayloadB := fb.sPayload; END_IF
+    fb.Observe(sObservedTopic := fb.sTopic, pObservedPayload := ADR(fb.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fb.sPayload));
+END_FOR
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Exact observations settle both desired entries');
+fb.RequestReplay();
+fb.Observe(sObservedTopic := sTopicA, pObservedPayload := ADR(sPayloadA), nObservedPayloadSize := PayloadByteLength(sValue := sPayloadA));
+AssertFalse(Condition := fb.bUnexpectedObservation, Message := 'Matching retained echo is not unexpected during replay');
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending, Message := 'Matching echo before a fresh replay publication cannot skip the publication');
+FOR i := 1 TO 2 DO
+    IF NOT fb.bPublishPending THEN fb.Plan(aLights := a); END_IF
+    AssertTrue(Condition := fb.bPublishPending, Message := 'Each replayed desired entry owes a fresh publication');
+    sPublishTopic := fb.sTopic; sPublishPayload := fb.sPayload;
+    fb.ConfirmPublish(bAccepted := TRUE);
+    AssertFalse(Condition := fb.bReady, Message := 'Accepted fresh publication still requires broker observation');
+    fb.Observe(sObservedTopic := sPublishTopic, pObservedPayload := ADR(sPublishPayload), nObservedPayloadSize := PayloadByteLength(sValue := sPublishPayload));
+END_FOR
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Fresh publication followed by exact echo settles every replay entry');
+fb.ForceReplay();
+sWrong := 'mismatching replay payload';
+fb.Observe(sObservedTopic := sTopicA, pObservedPayload := ADR(sWrong), nObservedPayloadSize := PayloadByteLength(sValue := sWrong));
+AssertTrue(Condition := fb.bUnexpectedObservation, Message := 'Mismatching desired payload is unexpected even when replay cleared observed state');
+a[1].sName := 'Renamed during replay';
+fb.UpdateCatalog(aLights := a);
+AssertTrue(Condition := fb.bValid AND fb.bCatalogChanged, Message := 'Name-only desired payload change is reported as a catalog change');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="JsonEscapingAndMetadataBounds" Id="{ccfb21ea-8cb1-4d3a-b5be-25e6c5f0f308}">
+      <Declaration><![CDATA[METHOD PRIVATE JsonEscapingAndMetadataBounds
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    i : UDINT;
+    nLength : UDINT;
+    nNameStart : UDINT;
+    nFoundPosition : DINT;
+    bQuote : BOOL;
+    bBackslash : BOOL;
+    bExactNameEscaped : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Discovery JSON escaping and maximum metadata stay within payload bounds');
+IF TcUnit.IS_TEST_FINISHED('Discovery JSON escaping and maximum metadata stay within payload bounds') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Lamp $"$5C North';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending, Message := 'Escaped metadata plans valid discovery');
+nLength := 0;
+FOR i := 0 TO SIZEOF(fb.sPayload) - 1 DO IF fb.sPayload[i] = 0 THEN nLength := i; EXIT; END_IF END_FOR
+AssertTrue(Condition := nLength > 0 AND nLength < SIZEOF(fb.sPayload), Message := 'Escaped payload is NUL terminated within full buffer');
+nNameStart := 0;
+IF nLength > 0 THEN
+    nFoundPosition := FIND(fb.sPayload, 'Lamp');
+    IF nFoundPosition > 0 THEN nNameStart := DINT_TO_UDINT(nFoundPosition - 1); END_IF
+END_IF
+bExactNameEscaped := FALSE;
+IF (nLength > 0) AND (nNameStart > 0) AND (nNameStart + 10 < nLength) THEN
+    bExactNameEscaped := (fb.sPayload[nNameStart + 3] = 112) AND (fb.sPayload[nNameStart + 4] = 32) AND (fb.sPayload[nNameStart + 5] = 92) AND (fb.sPayload[nNameStart + 6] = 34) AND (fb.sPayload[nNameStart + 7] = 92) AND (fb.sPayload[nNameStart + 8] = 92) AND (fb.sPayload[nNameStart + 9] = 32) AND (fb.sPayload[nNameStart + 10] = 78);
+END_IF
+AssertTrue(Condition := bExactNameEscaped, Message := 'Exact quote and backslash in metadata are JSON escaped');
+bQuote := FALSE; bBackslash := FALSE;
+IF nLength > 0 THEN
+    FOR i := 0 TO nLength - 1 DO
+        IF (fb.sPayload[i] = 92) AND (i + 1 < nLength) AND (fb.sPayload[i + 1] = 34) THEN bQuote := TRUE; END_IF
+        IF (fb.sPayload[i] = 92) AND (i + 1 < nLength) AND (fb.sPayload[i + 1] = 92) THEN bBackslash := TRUE; END_IF
+    END_FOR
+END_IF
+AssertTrue(Condition := bQuote AND bBackslash, Message := 'JSON quote and backslash both use escape sequences');
+fb.ConfirmPublish(bAccepted := TRUE);
+a[1].sLocationName := '1234567890123456789012345678901234567890123456789012345678901234';
+a[1].sName := '1234567890123456789012345678901234567890123456789012345678901234';
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid AND fb.bPublishPending, Message := 'Maximum 64-character metadata values remain valid');
+nLength := 0;
+FOR i := 0 TO SIZEOF(fb.sPayload) - 1 DO IF fb.sPayload[i] = 0 THEN nLength := i; EXIT; END_IF END_FOR
+AssertTrue(Condition := nLength > 0 AND nLength < SIZEOF(fb.sPayload), Message := 'Maximum metadata output remains bounded and terminated');
+AssertTrue(Condition := FIND(fb.sPayload, '1234567890123456789012345678901234567890123456789012345678901234') > 0, Message := 'Maximum metadata content is present in output');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="InvalidCatalogsFailClosed" Id="{6a2bbfc2-e2db-4a07-97ca-014993c2442e}">
+      <Declaration><![CDATA[METHOD PRIVATE InvalidCatalogsFailClosed
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..17] OF ST_LightInfo;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Discovery rejects oversized duplicate and unsafe catalogs');
+IF TcUnit.IS_TEST_FINISHED('Discovery rejects oversized duplicate and unsafe catalogs') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Lamp';
+fb.bTestNamespace := TRUE; fb.nLightCount := 1; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bValid AND fb.bPublishPending, Message := 'Single-entry catalog begins valid and pending');
+fb.bCatalogReady := FALSE; fb.Plan(aLights := a);
+AssertTrue(Condition := NOT fb.bReady AND NOT fb.bPublishPending, Message := 'Unready catalog schedules no publication');
+fb.bCatalogReady := TRUE; fb.nLightCount := 17; fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bValid OR fb.bPublishPending OR fb.bReady, Message := 'Seventeen lights fail closed');
+a[1].sId := 'bad/id'; fb.nLightCount := 1; fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bValid OR fb.bPublishPending, Message := 'Unsafe slash in identity fails closed');
+a[1].sId := 'main'; a[2] := a[1]; fb.nLightCount := 2; fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bValid OR fb.bPublishPending, Message := 'Duplicate identity fails closed');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="NamespaceAndSnapshotPreserveFifo" Id="{7bcfd289-b690-42de-9458-489b76a7762e}">
+      <Declaration><![CDATA[METHOD PRIVATE NamespaceAndSnapshotPreserveFifo
+VAR
+    fb : S85Core.FB_MqttLightProtocol;
+    a : ARRAY[1..1] OF ST_LightInfo;
+    stCommand : ST_LightCommand;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('LOCAL and PROD namespaces differ while snapshot preserves FIFO');
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Ceiling';
+fb.bTestNamespace := TRUE; fb.PlanState(aLights := a); fb.ConfirmPublish(bAccepted := TRUE);
+fb.SetConnection(bNewReady := TRUE); fb.PlanState(aLights := a);
+AssertFalse(Condition := fb.bPublishPending, Message := 'Settled state does not create an unsolicited snapshot');
+AssertFalse(Condition := fb.Receive(sTopic := 's85/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := a), Message := 'LOCAL rejects production SET namespace');
+AssertTrue(Condition := fb.Receive(sTopic := 's85/test/locations/H.01-09/lights/main/set', sPayload := 'ON', nPayloadSize := 2, aLights := a), Message := 'LOCAL accepts LOCAL SET namespace');
+AssertTrue(Condition := fb.nCount = 1, Message := 'LOCAL command is queued before snapshot');
+fb.RequestSnapshot(); fb.PlanState(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.nCount = 1, Message := 'Snapshot is planned with command still queued');
+stCommand := fb.Pop();
+AssertTrue(Condition := stCommand.bValid AND stCommand.bTargetOn, Message := 'FIFO command survives snapshot publication planning');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="FullCapacityTombstoneOwnership" Id="{be156924-0baa-4105-b3e8-87026025f1a9}">
+      <Declaration><![CDATA[METHOD PRIVATE FullCapacityTombstoneOwnership
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..16] OF ST_LightInfo;
+    b : ARRAY[1..16] OF ST_LightInfo;
+    sRemovedTopic : STRING(255);
+    sReplacementTopic : STRING(255);
+    sReplacementPayload : STRING(2047);
+    i : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Full sixteen-entry removal retains exact tombstone ownership through retries and echoes');
+IF TcUnit.IS_TEST_FINISHED('Full sixteen-entry removal retains exact tombstone ownership through retries and echoes') THEN RETURN; END_IF
+fb.bTestNamespace := TRUE;
+FOR i := 1 TO 16 DO
+    a[i].sLocationId := 'H.01-09'; a[i].sLocationName := 'Workshop';
+    a[i].sId := CONCAT('light', INT_TO_STRING(i)); a[i].sName := CONCAT('Lamp ', INT_TO_STRING(i));
+END_FOR
+FOR i := 1 TO 16 DO
+    fb.Plan(aLights := a);
+    AssertTrue(Condition := fb.bPublishPending, Message := 'Every desired slot can be published');
+    IF i = 16 THEN sRemovedTopic := fb.sTopic; END_IF
+    fb.Observe(sObservedTopic := fb.sTopic, pObservedPayload := ADR(fb.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fb.sPayload));
+END_FOR
+fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady, Message := 'Exact observations settle all sixteen desired identities');
+FOR i := 1 TO 15 DO b[i] := a[i]; END_FOR
+b[16].sLocationId := 'H.01-09'; b[16].sLocationName := 'Workshop'; b[16].sId := 'replacement'; b[16].sName := 'Replacement';
+fb.Plan(aLights := b);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sRemovedTopic AND LEN(fb.sPayload) = 0, Message := 'Full-capacity change selects exact removed identity first');
+fb.ConfirmPublish(bAccepted := FALSE);
+fb.Plan(aLights := b);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = 'homeassistant/device/s85_test/s85_test_482E30312D3039_light_7265706C6163656D656E74/config' AND LEN(fb.sPayload) > 0, Message := 'Replacement desired entry follows rejected orphan attempt');
+sReplacementTopic := fb.sTopic; sReplacementPayload := fb.sPayload;
+fb.Observe(sObservedTopic := sReplacementTopic, pObservedPayload := ADR(sReplacementPayload), nObservedPayloadSize := PayloadByteLength(sValue := sReplacementPayload));
+fb.nNowMs := 999; fb.Plan(aLights := b);
+AssertFalse(Condition := fb.bPublishPending, Message := 'Orphan retry remains unavailable before its deadline');
+fb.nNowMs := 1000; fb.Plan(aLights := b);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sRemovedTopic AND LEN(fb.sPayload) = 0, Message := 'Exact orphan tombstone retries at deadline');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Plan(aLights := b);
+AssertFalse(Condition := fb.bReady, Message := 'Accepted tombstone does not settle without empty echo');
+fb.Observe(sObservedTopic := sRemovedTopic, pObservedPayload := 0, nObservedPayloadSize := 0);
+fb.Plan(aLights := b);
+AssertTrue(Condition := fb.bReady AND NOT fb.bPublishPending, Message := 'Exact empty echo retires orphan and observed replacement settles inventory');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="PendingRenameAndIdentityChangeObservations" Id="{3d491a52-6fbf-42af-9b09-24fe2ad10d85}">
+      <Declaration><![CDATA[METHOD PRIVATE PendingRenameAndIdentityChangeObservations
+VAR_INST
+    fbRename : S85Core.FB_MqttDiscovery;
+    fbIdentity : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sOldTopic : STRING(255);
+    sNewTopic : STRING(255);
+    sOldPayload : STRING(2047);
+    sNewPayload : STRING(2047);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Pending rename and identity change settle only through exact observations');
+IF TcUnit.IS_TEST_FINISHED('Pending rename and identity change settle only through exact observations') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Lamp';
+fbRename.bTestNamespace := TRUE; fbRename.Plan(aLights := a); sOldTopic := fbRename.sTopic; sOldPayload := fbRename.sPayload;
+a[1].sName := 'Renamed Lamp'; fbRename.Plan(aLights := a); sNewPayload := fbRename.sPayload;
+AssertTrue(Condition := fbRename.bPublishPending AND fbRename.sTopic = sOldTopic AND sNewPayload <> sOldPayload, Message := 'Pending rename retains topic and updates desired payload');
+fbRename.Observe(sObservedTopic := sOldTopic, pObservedPayload := ADR(sOldPayload), nObservedPayloadSize := PayloadByteLength(sValue := sOldPayload)); fbRename.Plan(aLights := a);
+AssertFalse(Condition := fbRename.bReady, Message := 'Stale payload echo cannot settle renamed desired config');
+fbRename.Observe(sObservedTopic := sOldTopic, pObservedPayload := ADR(sNewPayload), nObservedPayloadSize := PayloadByteLength(sValue := sNewPayload)); fbRename.Plan(aLights := a);
+AssertTrue(Condition := fbRename.bReady, Message := 'Exact renamed payload echo settles stable identity');
+
+fbIdentity.bTestNamespace := TRUE; a[1].sName := 'Lamp';
+fbIdentity.Plan(aLights := a); sOldTopic := fbIdentity.sTopic; sOldPayload := fbIdentity.sPayload;
+a[1].sId := 'replacement'; fbIdentity.Plan(aLights := a); sNewTopic := fbIdentity.sTopic; sNewPayload := fbIdentity.sPayload;
+AssertTrue(Condition := fbIdentity.bPublishPending AND sNewTopic <> sOldTopic AND LEN(sNewPayload) > 0, Message := 'Identity change plans the new config');
+fbIdentity.ConfirmPublish(bAccepted := TRUE); fbIdentity.Plan(aLights := a);
+AssertTrue(Condition := fbIdentity.bCoverageRecoveryRequested AND NOT fbIdentity.bPublishPending, Message := 'Publish attempt history requests recovery but does not create tombstone ownership');
+fbIdentity.Observe(sObservedTopic := sOldTopic, pObservedPayload := ADR(sOldPayload), nObservedPayloadSize := PayloadByteLength(sValue := sOldPayload));
+fbIdentity.Observe(sObservedTopic := sNewTopic, pObservedPayload := ADR(sNewPayload), nObservedPayloadSize := PayloadByteLength(sValue := sNewPayload));
+fbIdentity.Plan(aLights := a);
+AssertTrue(Condition := fbIdentity.bPublishPending AND fbIdentity.sTopic = sOldTopic AND LEN(fbIdentity.sPayload) = 0, Message := 'Old and new observations establish exact tombstone ownership');
+fbIdentity.ConfirmPublish(bAccepted := TRUE); fbIdentity.Plan(aLights := a);
+AssertFalse(Condition := fbIdentity.bReady, Message := 'Accepted identity tombstone does not settle without empty observation');
+fbIdentity.Observe(sObservedTopic := sOldTopic, pObservedPayload := 0, nObservedPayloadSize := 0); fbIdentity.Plan(aLights := a);
+AssertFalse(Condition := fbIdentity.bReady, Message := 'Exact empty observation retires known topic but cannot clear the permanent uncertainty fault');
+AssertTrue(Condition := fbIdentity.bCoverageFault AND fbIdentity.bCoverageRecoveryRequested, Message := 'Unobserved publish-attempt uncertainty remains latched after later cleanup');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="PayloadByteLength" Id="{2c20c417-794d-4983-96e0-4f114efeb42b}">
+      <Declaration><![CDATA[METHOD PRIVATE PayloadByteLength : UDINT
+VAR_INPUT
+    sValue : STRING(2047);
+END_VAR
+VAR
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[PayloadByteLength := SIZEOF(sValue);
+FOR i := 0 TO SIZEOF(sValue) - 1 DO
+    IF sValue[i] = 0 THEN PayloadByteLength := i; RETURN; END_IF
+END_FOR]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

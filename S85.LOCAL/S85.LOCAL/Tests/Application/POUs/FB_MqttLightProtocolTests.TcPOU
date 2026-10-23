@@ -133,6 +133,7 @@ fbProtocol.PlanState(aLights := aLights);
 AssertFalse(Condition := fbProtocol.bPublishPending, Message := 'Reverting to acknowledged current state needs no publish');
 fbProtocol.SetConnection(bNewReady := FALSE);
 fbProtocol.SetConnection(bNewReady := TRUE);
+fbProtocol.RequestSnapshot();
 fbProtocol.PlanState(aLights := aLights);
 AssertTrue(Condition := fbProtocol.bPublishPending, Message := 'Reconnect schedules a fresh complete snapshot');
 AssertTrue(Condition := fbProtocol.sStatePayload = 'OFF', Message := 'Snapshot begins with current OFF state');
@@ -141,6 +142,12 @@ aLights[1].bOn := TRUE;
 fbProtocol.PlanState(aLights := aLights);
 AssertTrue(Condition := fbProtocol.bPublishPending AND (fbProtocol.sStatePayload = 'ON'), Message := 'Failed snapshot publication replans the newest actual ON state');
 fbProtocol.ConfirmPublish(bAccepted := TRUE);
+fbProtocol.RequestSnapshot();
+fbProtocol.PlanState(aLights := aLights);
+AssertTrue(Condition := fbProtocol.bPublishPending, Message := 'Metadata replay requests a fresh state snapshot even when unchanged');
+aLights[1].bOn := FALSE;
+fbProtocol.PlanState(aLights := aLights);
+AssertTrue(Condition := fbProtocol.bPublishPending AND (fbProtocol.sStatePayload = 'OFF'), Message := 'State snapshot follows a logical change while replay is pending');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="FifoWraparoundPreservesRoutesAndTargets" Id="{de0ebd23-e04e-4852-a29c-22f9d552d16a}">

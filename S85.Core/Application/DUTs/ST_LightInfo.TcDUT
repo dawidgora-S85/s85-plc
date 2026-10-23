@@ -4,7 +4,9 @@
     <Declaration><![CDATA[TYPE ST_LightInfo :
 STRUCT
     sLocationId : STRING(16);
+    sLocationName : STRING(64);
     sId : STRING(16);
+    sName : STRING(64);
     sType : STRING(16) := 'light';
     bOn : BOOL;
 END_STRUCT

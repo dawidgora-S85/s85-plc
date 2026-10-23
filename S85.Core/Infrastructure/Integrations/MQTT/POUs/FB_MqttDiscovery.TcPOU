@@ -1,0 +1,576 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttDiscovery" Id="{73c84989-1536-4695-a664-395e4dba38d9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttDiscovery
+VAR_INPUT
+    bTestNamespace : BOOL := FALSE;
+    bCatalogReady : BOOL := TRUE;
+    nLightCount : DINT := -1;
+    nNowMs : ULINT := 0;
+END_VAR
+VAR_OUTPUT
+    bReady : BOOL;
+    bValid : BOOL;
+    bPublishPending : BOOL;
+    bCoverageRecoveryRequested : BOOL;
+    bCoverageLost : BOOL;
+    bCoverageFault : BOOL;
+    bOrphanCapacityAvailable : BOOL;
+    bRefreshRequired : BOOL;
+    bCatalogChanged : BOOL;
+    bUnexpectedObservation : BOOL;
+    nPendingOrphanCount : UINT;
+    nOrphanRetirements : UDINT;
+    nOrphanOverflow : UDINT;
+    nRejectedObservations : UDINT;
+    sTopic : STRING(255);
+    sPayload : STRING(2047);
+END_VAR
+VAR
+    fbTopicMap : FB_MqttTopicMap;
+    aDesiredTopic : ARRAY[1..16] OF STRING(255);
+    aDesiredPayload : ARRAY[1..16] OF STRING(2047);
+    aDesiredObserved : ARRAY[1..16] OF BOOL;
+    aDesiredReplayPending : ARRAY[1..16] OF BOOL;
+    aDesiredPresent : ARRAY[1..16] OF BOOL;
+    aDesiredPublishAttempted : ARRAY[1..16] OF BOOL;
+    aDesiredLastAttempt : ARRAY[1..16] OF ULINT;
+    aDesiredAttemptCount : ARRAY[1..16] OF USINT;
+    aOrphanTopic : ARRAY[1..32] OF STRING(255);
+    aOrphanObserved : ARRAY[1..32] OF BOOL;
+    aOrphanLastAttempt : ARRAY[1..32] OF ULINT;
+    aOrphanAttemptCount : ARRAY[1..32] OF USINT;
+    nDesiredCount : UINT;
+    nCursor : UINT := 1;
+    nPendingIndex : UINT;
+    bPendingOrphan : BOOL;
+    bReplayActive : BOOL;
+    bNamespaceLocked : BOOL;
+    bCachedTestNamespace : BOOL;
+    bPlanValid : BOOL;
+    aNewTopic : ARRAY[1..16] OF STRING(255);
+    aNewPayload : ARRAY[1..16] OF STRING(2047);
+    aNewObserved : ARRAY[1..16] OF BOOL;
+    aNewReplayPending : ARRAY[1..16] OF BOOL;
+    aNewPresent : ARRAY[1..16] OF BOOL;
+    aNewPublishAttempted : ARRAY[1..16] OF BOOL;
+    aNewLastAttempt : ARRAY[1..16] OF ULINT;
+    aNewAttemptCount : ARRAY[1..16] OF USINT;
+    nNewCount : UINT;
+    nCatalogCount : DINT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="RequestReplay" Id="{b150f12d-cf3d-4685-ab2b-a13ab86340e2}">
+      <Declaration><![CDATA[METHOD PUBLIC RequestReplay]]></Declaration>
+      <Implementation><ST><![CDATA[IF bReplayActive THEN RETURN; END_IF
+ForceReplay();]]></ST></Implementation>
+    </Method>
+    <Method Name="ForceReplay" Id="{30e7a687-ef3e-4649-93c6-3763a598d84c}">
+      <Declaration><![CDATA[METHOD PUBLIC ForceReplay]]></Declaration>
+      <Implementation><ST><![CDATA[bReplayActive := TRUE;
+FOR nPendingIndex := 1 TO nDesiredCount DO
+    aDesiredObserved[nPendingIndex] := FALSE;
+    aDesiredReplayPending[nPendingIndex] := TRUE;
+    aDesiredLastAttempt[nPendingIndex] := 0;
+    aDesiredAttemptCount[nPendingIndex] := 0;
+END_FOR
+bReady := FALSE;
+bRefreshRequired := nDesiredCount > 0;
+UpdateReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="RequestCoverageReplay" Id="{20f3c63e-0c15-4fc8-b8c2-1ed83bdb8d46}">
+      <Declaration><![CDATA[METHOD PUBLIC RequestCoverageReplay]]></Declaration>
+      <Implementation><ST><![CDATA[bCoverageLost := TRUE;
+bCoverageFault := TRUE;
+bCoverageRecoveryRequested := TRUE;
+UpdateReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="OnTransportLoss" Id="{786efccf-3ea2-4d75-ad3f-ce295bba9c9e}">
+      <Declaration><![CDATA[METHOD PUBLIC OnTransportLoss]]></Declaration>
+      <Implementation><ST><![CDATA[(* Ordinary reconnect requests replay but does not latch the detected-loss fault. *)
+bCoverageLost := TRUE;
+bCoverageRecoveryRequested := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="CoverageReplayStarted" Id="{85bac1b6-6ed5-4bb3-9a27-c14f90cdd171}">
+      <Declaration><![CDATA[METHOD PUBLIC CoverageReplayStarted]]></Declaration>
+      <Implementation><ST><![CDATA[IF NOT bCoverageFault THEN bCoverageRecoveryRequested := FALSE; END_IF
+ForceReplay();]]></ST></Implementation>
+    </Method>
+    <Method Name="StringLength" Id="{86e46705-a00a-470d-af86-a6f1e58fa393}">
+      <Declaration><![CDATA[METHOD PRIVATE StringLength : UDINT
+VAR_INPUT
+    sValue : STRING(2047);
+END_VAR
+VAR
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[StringLength := SIZEOF(sValue);
+FOR i := 0 TO SIZEOF(sValue) - 1 DO
+    IF sValue[i] = 0 THEN
+        StringLength := i;
+        RETURN;
+    END_IF
+END_FOR]]></ST></Implementation>
+    </Method>
+    <Method Name="StringsEqual" Id="{b6304950-092c-4590-8e75-d041d3a1ad53}">
+      <Declaration><![CDATA[METHOD PRIVATE StringsEqual : BOOL
+VAR_INPUT
+    sLeft : STRING(2047);
+    sRight : STRING(2047);
+END_VAR
+VAR
+    i : UDINT;
+    nLeftLength : UDINT;
+    nRightLength : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[StringsEqual := FALSE;
+nLeftLength := StringLength(sValue := sLeft);
+nRightLength := StringLength(sValue := sRight);
+IF (nLeftLength >= SIZEOF(sLeft)) OR (nRightLength >= SIZEOF(sRight)) OR (nLeftLength <> nRightLength) THEN RETURN; END_IF
+IF nLeftLength > 0 THEN
+    FOR i := 0 TO nLeftLength - 1 DO
+        IF sLeft[i] <> sRight[i] THEN RETURN; END_IF
+    END_FOR
+END_IF
+StringsEqual := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="ValidateName" Id="{8f448107-e61b-43a4-a421-9aa4bd065851}">
+      <Declaration><![CDATA[METHOD PRIVATE ValidateName : BOOL
+VAR_INPUT
+    sName : STRING(64);
+END_VAR
+VAR
+    i : UDINT;
+    nLength : UDINT;
+    nCode : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[ValidateName := FALSE;
+nLength := INT_TO_UDINT(LEN(sName));
+IF (nLength = 0) OR (nLength > 64) THEN RETURN; END_IF
+FOR i := 0 TO nLength - 1 DO
+    nCode := BYTE_TO_INT(sName[i]);
+    IF (nCode < 32) OR (nCode > 126) THEN RETURN; END_IF
+END_FOR
+ValidateName := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="Append" Id="{57fa6051-570e-4057-8ec8-077c9c6cba6d}">
+      <Declaration><![CDATA[METHOD PRIVATE Append : BOOL
+VAR_IN_OUT
+    sTarget : STRING(2047);
+END_VAR
+VAR_INPUT
+    sFragment : STRING(2047);
+END_VAR
+VAR
+    i : UDINT;
+    nCurrent : UDINT;
+    nFragment : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[Append := FALSE;
+nCurrent := StringLength(sValue := sTarget);
+nFragment := StringLength(sValue := sFragment);
+IF (nCurrent >= SIZEOF(sTarget)) OR (nFragment >= SIZEOF(sFragment)) THEN RETURN; END_IF
+IF (nCurrent + nFragment) > 2047 THEN RETURN; END_IF
+IF nFragment > 0 THEN
+    FOR i := 0 TO nFragment - 1 DO sTarget[nCurrent + i] := sFragment[i]; END_FOR
+END_IF
+sTarget[nCurrent + nFragment] := 0;
+Append := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="AppendName" Id="{c3afbe54-a96d-4ebc-b28c-0eeb358f9554}">
+      <Declaration><![CDATA[METHOD PRIVATE AppendName : BOOL
+VAR_IN_OUT
+    sTarget : STRING(2047);
+END_VAR
+VAR_INPUT
+    sName : STRING(129);
+END_VAR
+VAR
+    i : UDINT;
+    nLength : UDINT;
+    nCode : INT;
+    sCharacter : STRING(2);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[AppendName := FALSE;
+nLength := INT_TO_UDINT(LEN(sName));
+IF nLength >= SIZEOF(sName) THEN RETURN; END_IF
+IF NOT Append(sTarget := sTarget, sFragment := '"') THEN RETURN; END_IF
+IF nLength > 0 THEN
+    FOR i := 0 TO nLength - 1 DO
+        nCode := BYTE_TO_INT(sName[i]);
+        IF (nCode < 32) OR (nCode > 126) THEN RETURN; END_IF
+        IF nCode = 34 THEN
+            IF NOT Append(sTarget := sTarget, sFragment := '$5C') THEN RETURN; END_IF
+            IF NOT Append(sTarget := sTarget, sFragment := '"') THEN RETURN; END_IF
+        ELSIF nCode = 92 THEN
+            IF NOT Append(sTarget := sTarget, sFragment := '$5C$5C') THEN RETURN; END_IF
+        ELSE
+            sCharacter[0] := sName[i];
+            (* Zero-based byte 1 is the NUL after this one-character fragment. *)
+            sCharacter[1] := 0;
+            IF NOT Append(sTarget := sTarget, sFragment := sCharacter) THEN RETURN; END_IF
+        END_IF
+    END_FOR
+END_IF
+IF NOT Append(sTarget := sTarget, sFragment := '"') THEN RETURN; END_IF
+AppendName := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildPayload" Id="{57c0645e-97f3-471b-a684-60ef01d49b93}">
+      <Declaration><![CDATA[METHOD PRIVATE BuildPayload : BOOL
+VAR_INPUT
+    stLight : ST_LightInfo;
+END_VAR
+VAR
+    sIdentity : STRING(128);
+    sAvailability : STRING(255);
+    sTopic : STRING(255);
+    sDeviceName : STRING(129);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[BuildPayload := FALSE;
+sPayload := '';
+sIdentity := fbTopicMap.BuildIdentity(bTestNamespace := bTestNamespace, sLocationId := stLight.sLocationId, sLightId := stLight.sId);
+IF LEN(sIdentity) = 0 THEN RETURN; END_IF
+IF NOT ValidateName(sName := stLight.sLocationName) OR NOT ValidateName(sName := stLight.sName) THEN RETURN; END_IF
+sAvailability := fbTopicMap.BuildAvailabilityTopic(bTestNamespace := bTestNamespace);
+sDeviceName := CONCAT(stLight.sLocationName, ' ');
+sDeviceName := CONCAT(sDeviceName, stLight.sName);
+IF NOT Append(sTarget := sPayload, sFragment := '{"dev":{"ids":["') THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := sIdentity) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '"],"name":') THEN RETURN; END_IF
+IF NOT AppendName(sTarget := sPayload, sName := sDeviceName) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '},"o":{"name":"S85","sw":"1"},"availability":[{"topic":"') THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := sAvailability) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '"}],"cmps":{"light":{"p":"light","unique_id":"') THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := sIdentity) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '","name":null,"optimistic":false,"retain":false,"qos":1,"command_topic":"') THEN RETURN; END_IF
+sTopic := fbTopicMap.BuildLightTopic(bTestNamespace := bTestNamespace, sLocationId := stLight.sLocationId, sLightId := stLight.sId, sSuffix := 'set');
+IF NOT Append(sTarget := sPayload, sFragment := sTopic) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '","state_topic":"') THEN RETURN; END_IF
+sTopic := fbTopicMap.BuildLightTopic(bTestNamespace := bTestNamespace, sLocationId := stLight.sLocationId, sLightId := stLight.sId, sSuffix := 'state');
+IF NOT Append(sTarget := sPayload, sFragment := sTopic) THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '"}}}') THEN RETURN; END_IF
+BuildPayload := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="UpdateReadiness" Id="{930ab0bf-9edc-4b9a-a2af-616c28ace624}">
+      <Declaration><![CDATA[METHOD PRIVATE UpdateReadiness
+VAR
+    i : UINT;
+    bAllDesiredObserved : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[nPendingOrphanCount := 0;
+bOrphanCapacityAvailable := FALSE;
+FOR i := 1 TO 32 DO
+    IF aOrphanTopic[i] <> '' THEN nPendingOrphanCount := nPendingOrphanCount + 1;
+    ELSE bOrphanCapacityAvailable := TRUE;
+    END_IF
+END_FOR
+bReady := bValid AND bCatalogReady;
+IF bCoverageFault THEN bReady := FALSE; END_IF
+bRefreshRequired := FALSE;
+bAllDesiredObserved := TRUE;
+FOR i := 1 TO nDesiredCount DO
+    IF NOT aDesiredObserved[i] OR aDesiredReplayPending[i] THEN bReady := FALSE; bRefreshRequired := TRUE; bAllDesiredObserved := FALSE; END_IF
+END_FOR
+IF nPendingOrphanCount > 0 THEN bReady := FALSE; END_IF
+IF bReplayActive AND bAllDesiredObserved THEN bReplayActive := FALSE; END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="UpdateCatalog" Id="{9261443a-9294-4447-9eaf-a1450d2bba41}">
+      <Declaration><![CDATA[METHOD PUBLIC UpdateCatalog
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR
+    i : DINT;
+    j : DINT;
+    k : UINT;
+    nLower : DINT;
+    nUpper : DINT;
+    nCount : DINT;
+    bFound : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[bCatalogChanged := FALSE;
+bValid := FALSE;
+bReady := FALSE;
+bPublishPending := FALSE;
+sTopic := '';
+sPayload := '';
+IF NOT bCatalogReady THEN UpdateReadiness(); RETURN; END_IF
+nLower := LOWER_BOUND(aLights, 1);
+nUpper := UPPER_BOUND(aLights, 1);
+nCount := nUpper - nLower + 1;
+IF nLightCount = -1 THEN nCatalogCount := nCount;
+ELSE nCatalogCount := nLightCount; END_IF
+IF (nCatalogCount < 0) OR (nCatalogCount > 16) OR (nCatalogCount > nCount) OR ((nCatalogCount = 0) AND (nLightCount <> 0)) THEN UpdateReadiness(); RETURN; END_IF
+IF bNamespaceLocked AND (bTestNamespace <> bCachedTestNamespace) THEN UpdateReadiness(); RETURN; END_IF
+(* Validate into scratch arrays before changing desired or orphan state. *)
+nNewCount := 0;
+bPlanValid := TRUE;
+FOR i := nLower TO nLower + nCatalogCount - 1 DO
+    IF NOT fbTopicMap.IsValidSegment(sSegment := aLights[i].sLocationId) OR NOT fbTopicMap.IsValidSegment(sSegment := aLights[i].sId) THEN bPlanValid := FALSE; EXIT; END_IF
+    IF NOT ValidateName(sName := aLights[i].sLocationName) OR NOT ValidateName(sName := aLights[i].sName) THEN bPlanValid := FALSE; EXIT; END_IF
+    FOR j := nLower TO i - 1 DO
+        IF (aLights[i].sLocationId = aLights[j].sLocationId) AND (aLights[i].sId = aLights[j].sId) THEN bPlanValid := FALSE; EXIT; END_IF
+    END_FOR
+    IF NOT bPlanValid THEN EXIT; END_IF
+    nNewCount := nNewCount + 1;
+    aNewTopic[nNewCount] := fbTopicMap.BuildDiscoveryTopic(bTestNamespace := bTestNamespace, sObjectId := fbTopicMap.BuildIdentity(bTestNamespace := bTestNamespace, sLocationId := aLights[i].sLocationId, sLightId := aLights[i].sId));
+    IF (aNewTopic[nNewCount] = '') OR NOT BuildPayload(stLight := aLights[i]) THEN bPlanValid := FALSE; EXIT; END_IF
+    aNewPayload[nNewCount] := sPayload;
+    FOR j := 1 TO nNewCount - 1 DO IF aNewTopic[j] = aNewTopic[nNewCount] THEN bPlanValid := FALSE; EXIT; END_IF END_FOR
+    IF NOT bPlanValid THEN EXIT; END_IF
+    aNewObserved[nNewCount] := FALSE;
+    aNewReplayPending[nNewCount] := FALSE;
+    aNewPresent[nNewCount] := FALSE;
+    aNewPublishAttempted[nNewCount] := FALSE;
+    aNewLastAttempt[nNewCount] := 0;
+    aNewAttemptCount[nNewCount] := 0;
+    FOR k := 1 TO nDesiredCount DO
+        IF aDesiredTopic[k] = aNewTopic[nNewCount] THEN
+            aNewPresent[nNewCount] := aDesiredPresent[k];
+            aNewPublishAttempted[nNewCount] := aDesiredPublishAttempted[k];
+            aNewLastAttempt[nNewCount] := aDesiredLastAttempt[k];
+            aNewAttemptCount[nNewCount] := aDesiredAttemptCount[k];
+            aNewReplayPending[nNewCount] := aDesiredReplayPending[k];
+            IF StringsEqual(sLeft := aDesiredPayload[k], sRight := aNewPayload[nNewCount]) THEN
+                aNewObserved[nNewCount] := aDesiredObserved[k];
+            ELSE
+                bCatalogChanged := TRUE;
+                aNewLastAttempt[nNewCount] := 0;
+                aNewAttemptCount[nNewCount] := 0;
+            END_IF
+        END_IF
+    END_FOR
+    FOR k := 1 TO 32 DO IF aOrphanTopic[k] = aNewTopic[nNewCount] THEN aNewPresent[nNewCount] := TRUE; END_IF END_FOR
+END_FOR
+IF NOT bPlanValid THEN UpdateReadiness(); RETURN; END_IF
+IF nNewCount <> nDesiredCount THEN bCatalogChanged := TRUE; END_IF
+IF NOT bCatalogChanged THEN
+    FOR k := 1 TO nDesiredCount DO
+        bFound := FALSE;
+        FOR j := 1 TO nNewCount DO
+            IF aDesiredTopic[k] = aNewTopic[j] THEN bFound := TRUE; EXIT; END_IF
+        END_FOR
+        IF NOT bFound THEN bCatalogChanged := TRUE; EXIT; END_IF
+    END_FOR
+END_IF
+(* Desired ownership cancels an unsent orphan tombstone for the exact same topic. *)
+FOR i := 1 TO nNewCount DO
+    FOR j := 1 TO 32 DO
+        IF aOrphanTopic[j] = aNewTopic[i] THEN
+            aOrphanTopic[j] := ''; aOrphanObserved[j] := FALSE; aOrphanLastAttempt[j] := 0; aOrphanAttemptCount[j] := 0;
+        END_IF
+    END_FOR
+END_FOR
+FOR k := 1 TO nDesiredCount DO
+    bFound := FALSE;
+    FOR j := 1 TO nNewCount DO IF aDesiredTopic[k] = aNewTopic[j] THEN bFound := TRUE; END_IF END_FOR
+    IF NOT bFound THEN
+        IF aDesiredPresent[k] THEN
+            bFound := FALSE;
+            FOR j := 1 TO 32 DO IF aOrphanTopic[j] = aDesiredTopic[k] THEN aOrphanObserved[j] := TRUE; bFound := TRUE; EXIT; END_IF END_FOR
+            IF NOT bFound THEN
+                FOR j := 1 TO 32 DO
+                    IF aOrphanTopic[j] = '' THEN
+                        aOrphanTopic[j] := aDesiredTopic[k]; aOrphanObserved[j] := TRUE;
+                        aOrphanLastAttempt[j] := 0; aOrphanAttemptCount[j] := 0; bFound := TRUE; EXIT;
+                    END_IF
+                END_FOR
+            END_IF
+            IF NOT bFound THEN
+                IF nOrphanOverflow < 4294967295 THEN nOrphanOverflow := nOrphanOverflow + 1; END_IF
+                bCoverageLost := TRUE; bCoverageFault := TRUE; bCoverageRecoveryRequested := TRUE;
+            END_IF
+        END_IF
+        IF aDesiredPublishAttempted[k] AND NOT aDesiredPresent[k] THEN
+            (* An in-flight own publish may have become retained without an echo. Never tombstone from attempt history alone. *)
+            bCoverageLost := TRUE; bCoverageFault := TRUE; bCoverageRecoveryRequested := TRUE;
+        END_IF
+    END_IF
+END_FOR
+FOR k := 1 TO 16 DO
+    aDesiredTopic[k] := ''; aDesiredPayload[k] := '';
+    aDesiredObserved[k] := FALSE; aDesiredReplayPending[k] := FALSE; aDesiredPresent[k] := FALSE; aDesiredPublishAttempted[k] := FALSE;
+    aDesiredLastAttempt[k] := 0; aDesiredAttemptCount[k] := 0;
+END_FOR
+nDesiredCount := nNewCount;
+FOR k := 1 TO nNewCount DO
+    aDesiredTopic[k] := aNewTopic[k]; aDesiredPayload[k] := aNewPayload[k];
+    aDesiredObserved[k] := aNewObserved[k]; aDesiredReplayPending[k] := aNewReplayPending[k]; aDesiredPresent[k] := aNewPresent[k]; aDesiredPublishAttempted[k] := aNewPublishAttempted[k];
+    aDesiredLastAttempt[k] := aNewLastAttempt[k]; aDesiredAttemptCount[k] := aNewAttemptCount[k];
+END_FOR
+bCachedTestNamespace := bTestNamespace;
+bNamespaceLocked := TRUE;
+bValid := TRUE;
+bOrphanCapacityAvailable := FALSE;
+FOR j := 1 TO 32 DO IF aOrphanTopic[j] = '' THEN bOrphanCapacityAvailable := TRUE; EXIT; END_IF END_FOR
+UpdateReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="Plan" Id="{f0c0784c-e7a4-4a3c-a849-8cd824799c22}">
+      <Declaration><![CDATA[METHOD PUBLIC Plan
+VAR_IN_OUT
+    aLights : ARRAY[*] OF ST_LightInfo;
+END_VAR
+VAR
+    j : DINT;
+    nSlot : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[bPublishPending := FALSE;
+sTopic := '';
+sPayload := '';
+UpdateCatalog(aLights := aLights);
+IF NOT bValid THEN RETURN; END_IF
+(* Fair round-robin selection; advancing the cursor at selection time makes even rejected API calls fair. *)
+FOR j := 0 TO 47 DO
+    nSlot := nCursor;
+    nCursor := nCursor + 1;
+    IF nCursor > 48 THEN nCursor := 1; END_IF
+    IF nSlot <= 16 THEN
+        IF nSlot <= nDesiredCount AND (NOT aDesiredObserved[nSlot] OR aDesiredReplayPending[nSlot]) AND IsRetryDue(nLastAttempt := aDesiredLastAttempt[nSlot], nAttemptCount := aDesiredAttemptCount[nSlot]) THEN
+            sTopic := aDesiredTopic[nSlot]; sPayload := aDesiredPayload[nSlot];
+            aDesiredLastAttempt[nSlot] := nNowMs;
+            aDesiredPublishAttempted[nSlot] := TRUE;
+            IF aDesiredAttemptCount[nSlot] < 7 THEN aDesiredAttemptCount[nSlot] := aDesiredAttemptCount[nSlot] + 1; END_IF
+            nPendingIndex := nSlot; bPendingOrphan := FALSE; bPublishPending := TRUE; RETURN;
+        END_IF
+    ELSE
+        nSlot := nSlot - 16;
+        IF aOrphanTopic[nSlot] <> '' AND aOrphanObserved[nSlot] AND IsRetryDue(nLastAttempt := aOrphanLastAttempt[nSlot], nAttemptCount := aOrphanAttemptCount[nSlot]) THEN
+            sTopic := aOrphanTopic[nSlot]; sPayload := '';
+            aOrphanLastAttempt[nSlot] := nNowMs;
+            IF aOrphanAttemptCount[nSlot] < 7 THEN aOrphanAttemptCount[nSlot] := aOrphanAttemptCount[nSlot] + 1; END_IF
+            nPendingIndex := nSlot; bPendingOrphan := TRUE; bPublishPending := TRUE; RETURN;
+        END_IF
+    END_IF
+END_FOR
+UpdateReadiness();]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmPublish" Id="{80c76ee7-2bd1-47ce-a809-465946bb84c1}">
+      <Declaration><![CDATA[METHOD PUBLIC ConfirmPublish
+VAR_INPUT
+    bAccepted : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[(* Retained for compatibility. Publish acceptance is never settlement evidence. *)
+IF bPublishPending AND NOT bPendingOrphan AND bAccepted AND NOT bNamespaceLocked THEN
+    bCachedTestNamespace := bTestNamespace;
+    bNamespaceLocked := TRUE;
+END_IF
+IF bPublishPending AND NOT bPendingOrphan AND bAccepted AND (nPendingIndex <= nDesiredCount) THEN
+    IF aDesiredReplayPending[nPendingIndex] THEN aDesiredObserved[nPendingIndex] := FALSE; END_IF
+    aDesiredReplayPending[nPendingIndex] := FALSE;
+END_IF
+bPublishPending := FALSE;
+nPendingIndex := 0;]]></ST></Implementation>
+    </Method>
+    <Method Name="ConfirmAcceptedWithError" Id="{4e06151c-530d-4f12-8a10-77a0c077536e}">
+      <Declaration><![CDATA[METHOD PUBLIC ConfirmAcceptedWithError
+VAR_INPUT
+    bAccepted : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[(* A transport result changes no observed broker state. *)
+bPublishPending := FALSE;
+nPendingIndex := 0;]]></ST></Implementation>
+    </Method>
+    <Method Name="IsRetryDue" Id="{f365d646-88c2-4ca7-8abe-c67acdbc5a74}">
+      <Declaration><![CDATA[METHOD PRIVATE IsRetryDue : BOOL
+VAR_INPUT
+    nLastAttempt : ULINT;
+    nAttemptCount : USINT;
+END_VAR
+VAR
+    nDelay : ULINT;
+    i : USINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF nAttemptCount = 0 THEN IsRetryDue := TRUE; RETURN; END_IF
+nDelay := 1000;
+FOR i := 1 TO nAttemptCount - 1 DO
+    IF nDelay >= 30000 THEN nDelay := 60000; EXIT; END_IF
+    nDelay := nDelay * 2;
+END_FOR
+IsRetryDue := (nNowMs - nLastAttempt) >= nDelay;]]></ST></Implementation>
+    </Method>
+    <Method Name="Observe" Id="{be792fb6-756e-4ce6-8be0-a3eb462015cc}">
+      <Declaration><![CDATA[METHOD PUBLIC Observe
+VAR_INPUT
+    sObservedTopic : STRING(255);
+    pObservedPayload : POINTER TO BYTE;
+    nObservedPayloadSize : UDINT;
+END_VAR
+VAR
+    i : UINT;
+    j : UDINT;
+    bMatch : BOOL;
+    bWasObserved : BOOL;
+    bEmpty : BOOL;
+    nLength : UDINT;
+    pExpected : POINTER TO BYTE;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[bUnexpectedObservation := FALSE;
+IF NOT fbTopicMap.IsOwnDiscoveryTopic(bTestNamespace := bTestNamespace, sTopic := sObservedTopic) THEN
+    IF nRejectedObservations < 4294967295 THEN nRejectedObservations := nRejectedObservations + 1; END_IF
+    RETURN;
+END_IF
+IF nObservedPayloadSize > 2047 THEN bUnexpectedObservation := TRUE; END_IF
+IF (nObservedPayloadSize <= 2047) AND (nObservedPayloadSize > 0) AND (pObservedPayload = 0) THEN
+    bUnexpectedObservation := TRUE;
+    IF nRejectedObservations < 4294967295 THEN nRejectedObservations := nRejectedObservations + 1; END_IF
+    RETURN;
+END_IF
+IF bNamespaceLocked AND (bTestNamespace <> bCachedTestNamespace) THEN
+    bUnexpectedObservation := TRUE;
+    IF nRejectedObservations < 4294967295 THEN nRejectedObservations := nRejectedObservations + 1; END_IF
+    RETURN;
+END_IF
+bNamespaceLocked := TRUE;
+bCachedTestNamespace := bTestNamespace;
+bEmpty := nObservedPayloadSize = 0;
+FOR i := 1 TO nDesiredCount DO
+    IF aDesiredTopic[i] = sObservedTopic THEN
+        nLength := StringLength(sValue := aDesiredPayload[i]);
+        bMatch := (nLength = nObservedPayloadSize) AND ((nObservedPayloadSize = 0) OR (pObservedPayload <> 0));
+        IF bMatch AND (nLength > 0) THEN
+            pExpected := ADR(aDesiredPayload[i]);
+            FOR j := 0 TO nLength - 1 DO
+                IF pExpected[j] <> pObservedPayload[j] THEN bMatch := FALSE; EXIT; END_IF
+            END_FOR
+        END_IF
+        bWasObserved := aDesiredObserved[i];
+        IF NOT bMatch THEN bUnexpectedObservation := TRUE; END_IF
+        aDesiredObserved[i] := bMatch;
+        aDesiredPresent[i] := NOT bEmpty;
+        IF NOT bMatch AND bWasObserved THEN
+            aDesiredLastAttempt[i] := 0;
+            aDesiredAttemptCount[i] := 0;
+        END_IF
+        UpdateReadiness();
+        RETURN;
+    END_IF
+END_FOR
+FOR i := 1 TO 32 DO
+    IF aOrphanTopic[i] = sObservedTopic THEN
+        IF bEmpty THEN
+            IF nOrphanRetirements < 4294967295 THEN nOrphanRetirements := nOrphanRetirements + 1; END_IF
+            aOrphanTopic[i] := ''; aOrphanObserved[i] := FALSE; aOrphanLastAttempt[i] := 0; aOrphanAttemptCount[i] := 0;
+        ELSE
+            aOrphanObserved[i] := TRUE;
+        END_IF
+        UpdateReadiness();
+        RETURN;
+    END_IF
+END_FOR
+IF bEmpty THEN RETURN; END_IF
+bUnexpectedObservation := TRUE;
+FOR i := 1 TO 32 DO
+    IF aOrphanTopic[i] = '' THEN
+        aOrphanTopic[i] := sObservedTopic; aOrphanObserved[i] := TRUE; aOrphanLastAttempt[i] := 0; aOrphanAttemptCount[i] := 0;
+        UpdateReadiness();
+        RETURN;
+    END_IF
+END_FOR
+IF nOrphanOverflow < 4294967295 THEN nOrphanOverflow := nOrphanOverflow + 1; END_IF
+bCoverageLost := TRUE;
+bCoverageFault := TRUE;
+bCoverageRecoveryRequested := TRUE;
+UpdateReadiness();]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

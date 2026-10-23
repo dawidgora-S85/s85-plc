@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MqttTopicMap" Id="{aef441c2-ed17-44c1-a56d-71937c66324f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttTopicMap
+]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Method Name="BuildLightTopic" Id="{0e1be184-4a67-4c67-82ef-b654e3e69a37}">
+      <Declaration><![CDATA[METHOD PUBLIC BuildLightTopic : STRING(255)
+VAR_INPUT
+    bTestNamespace : BOOL;
+    sLocationId : STRING(16);
+    sLightId : STRING(16);
+    sSuffix : STRING(8);
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[BuildLightTopic := '';
+IF NOT IsValidSegment(sSegment := sLocationId) OR NOT IsValidSegment(sSegment := sLightId) THEN RETURN; END_IF
+IF (sSuffix <> 'set') AND (sSuffix <> 'state') THEN RETURN; END_IF
+IF bTestNamespace THEN
+    BuildLightTopic := CONCAT('s85/test/locations/', sLocationId);
+ELSE
+    BuildLightTopic := CONCAT('s85/locations/', sLocationId);
+END_IF
+BuildLightTopic := CONCAT(BuildLightTopic, '/lights/');
+BuildLightTopic := CONCAT(BuildLightTopic, sLightId);
+BuildLightTopic := CONCAT(BuildLightTopic, '/');
+BuildLightTopic := CONCAT(BuildLightTopic, sSuffix);]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildDiscoveryTopic" Id="{d3af6d0f-c9be-458b-a9e6-1a7673b6cdf5}">
+      <Declaration><![CDATA[METHOD PUBLIC BuildDiscoveryTopic : STRING(255)
+VAR_INPUT
+    bTestNamespace : BOOL;
+    sObjectId : STRING(128);
+END_VAR
+VAR
+    i : UINT;
+    nCode : INT;
+    nLength : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[BuildDiscoveryTopic := '';
+nLength := INT_TO_UINT(LEN(sObjectId));
+IF nLength = 0 THEN RETURN; END_IF
+FOR i := 0 TO nLength - 1 DO
+    nCode := BYTE_TO_INT(sObjectId[i]);
+    IF NOT (((nCode >= 48) AND (nCode <= 57)) OR ((nCode >= 65) AND (nCode <= 90)) OR ((nCode >= 97) AND (nCode <= 122)) OR (nCode = 45) OR (nCode = 95)) THEN RETURN; END_IF
+END_FOR
+IF bTestNamespace THEN
+    BuildDiscoveryTopic := CONCAT('homeassistant/device/s85_test/', sObjectId);
+ELSE
+    BuildDiscoveryTopic := CONCAT('homeassistant/device/s85/', sObjectId);
+END_IF
+BuildDiscoveryTopic := CONCAT(BuildDiscoveryTopic, '/config');]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildDiscoveryFilter" Id="{82274d7a-9aed-453f-b9a2-3a8ee8084de3}">
+      <Declaration><![CDATA[METHOD PUBLIC BuildDiscoveryFilter : STRING(255)
+VAR_INPUT
+    bTestNamespace : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF bTestNamespace THEN
+    BuildDiscoveryFilter := 'homeassistant/device/s85_test/+/config';
+ELSE
+    BuildDiscoveryFilter := 'homeassistant/device/s85/+/config';
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="IsOwnDiscoveryTopic" Id="{5f398004-30eb-4df1-9398-41e0c8487255}">
+      <Declaration><![CDATA[METHOD PUBLIC IsOwnDiscoveryTopic : BOOL
+VAR_INPUT
+    bTestNamespace : BOOL;
+    sTopic : STRING(255);
+END_VAR
+VAR
+    sPrefix : STRING(64);
+    nLength : UINT;
+    nPrefixLength : UINT;
+    nObjectStart : UINT;
+    nObjectEnd : UINT;
+    i : UINT;
+    nCode : INT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IsOwnDiscoveryTopic := FALSE;
+IF bTestNamespace THEN sPrefix := 'homeassistant/device/s85_test/';
+ELSE sPrefix := 'homeassistant/device/s85/'; END_IF
+nLength := INT_TO_UINT(LEN(sTopic));
+nPrefixLength := INT_TO_UINT(LEN(sPrefix));
+IF (nLength >= SIZEOF(sTopic)) OR (nLength <= nPrefixLength + 7) THEN RETURN; END_IF
+FOR i := 0 TO nPrefixLength - 1 DO IF sTopic[i] <> sPrefix[i] THEN RETURN; END_IF END_FOR
+nObjectStart := nPrefixLength;
+nObjectEnd := nLength - 7;
+IF (nObjectEnd <= nObjectStart) OR (sTopic[nObjectEnd] <> BYTE#16#2F) THEN RETURN; END_IF
+IF (sTopic[nObjectEnd + 1] <> BYTE#16#63) OR (sTopic[nObjectEnd + 2] <> BYTE#16#6F) OR (sTopic[nObjectEnd + 3] <> BYTE#16#6E) OR (sTopic[nObjectEnd + 4] <> BYTE#16#66) OR (sTopic[nObjectEnd + 5] <> BYTE#16#69) OR (sTopic[nObjectEnd + 6] <> BYTE#16#67) THEN RETURN; END_IF
+FOR i := nObjectStart TO nObjectEnd - 1 DO
+    nCode := BYTE_TO_INT(sTopic[i]);
+    IF (nCode < 32) OR (nCode = 127) OR (nCode = 35) OR (nCode = 43) OR (nCode = 47) THEN RETURN; END_IF
+END_FOR
+IsOwnDiscoveryTopic := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildAvailabilityTopic" Id="{46c49343-b6ce-4c33-98f4-1c97dfb991e8}">
+      <Declaration><![CDATA[METHOD PUBLIC BuildAvailabilityTopic : STRING(255)
+VAR_INPUT
+    bTestNamespace : BOOL;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IF bTestNamespace THEN
+    BuildAvailabilityTopic := 's85/test/availability';
+ELSE
+    BuildAvailabilityTopic := 's85/locations/availability';
+END_IF]]></ST></Implementation>
+    </Method>
+    <Method Name="IsValidSegment" Id="{1838b3af-47d0-4334-a0cd-1fa7de0cb68b}">
+      <Declaration><![CDATA[METHOD PUBLIC IsValidSegment : BOOL
+VAR_INPUT
+    sSegment : STRING(16);
+END_VAR
+VAR
+    i : UINT;
+    nCode : INT;
+    nLength : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[IsValidSegment := FALSE;
+nLength := INT_TO_UINT(LEN(sSegment));
+IF (nLength = 0) OR (nLength > 16) THEN RETURN; END_IF
+FOR i := 0 TO nLength - 1 DO
+    nCode := BYTE_TO_INT(sSegment[i]);
+    IF NOT (((nCode >= 48) AND (nCode <= 57)) OR ((nCode >= 65) AND (nCode <= 90)) OR ((nCode >= 97) AND (nCode <= 122)) OR (nCode = 45) OR (nCode = 46) OR (nCode = 95)) THEN
+        RETURN;
+    END_IF
+END_FOR
+IsValidSegment := TRUE;]]></ST></Implementation>
+    </Method>
+    <Method Name="BuildIdentity" Id="{0950b429-9de4-42a0-9664-3ed5a9f35d25}">
+      <Declaration><![CDATA[METHOD PUBLIC BuildIdentity : STRING(128)
+VAR_INPUT
+    bTestNamespace : BOOL;
+    sLocationId : STRING(16);
+    sLightId : STRING(16);
+END_VAR
+VAR
+    i : UINT;
+    nValue : INT;
+    nHigh : INT;
+    nLocationLength : UINT;
+    nLightLength : UINT;
+    sHex : STRING(16) := '0123456789ABCDEF';
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[BuildIdentity := '';
+IF NOT IsValidSegment(sSegment := sLocationId) OR NOT IsValidSegment(sSegment := sLightId) THEN RETURN; END_IF
+nLocationLength := INT_TO_UINT(LEN(sLocationId));
+nLightLength := INT_TO_UINT(LEN(sLightId));
+IF bTestNamespace THEN
+    BuildIdentity := 's85_test_';
+ELSE
+    BuildIdentity := 's85_';
+END_IF
+FOR i := 0 TO nLocationLength - 1 DO
+    nValue := BYTE_TO_INT(sLocationId[i]);
+    nHigh := 0;
+    WHILE nValue >= 16 DO
+        nValue := nValue - 16;
+        nHigh := nHigh + 1;
+    END_WHILE
+    BuildIdentity := CONCAT(BuildIdentity, MID(sHex, 1, nHigh + 1));
+    BuildIdentity := CONCAT(BuildIdentity, MID(sHex, 1, nValue + 1));
+END_FOR
+BuildIdentity := CONCAT(BuildIdentity, '_light_');
+FOR i := 0 TO nLightLength - 1 DO
+    nValue := BYTE_TO_INT(sLightId[i]);
+    nHigh := 0;
+    WHILE nValue >= 16 DO
+        nValue := nValue - 16;
+        nHigh := nHigh + 1;
+    END_WHILE
+    BuildIdentity := CONCAT(BuildIdentity, MID(sHex, 1, nHigh + 1));
+    BuildIdentity := CONCAT(BuildIdentity, MID(sHex, 1, nValue + 1));
+END_FOR]]></ST></Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

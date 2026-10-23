@@ -15,8 +15,11 @@ END_VAR
 
 VAR CONSTANT
     cLocationId : STRING(16) := 'H.01-01';
+    cLocationName : STRING(64) := 'Entryway';
     cMainLightId : STRING(16) := 'main';
+    cMainLightName : STRING(64) := 'Main light';
     cTemporaryLightId : STRING(16) := 'temporary';
+    cTemporaryLightName : STRING(64) := 'Temporary light';
 END_VAR
 
 VAR
@@ -41,10 +44,14 @@ fbUpperLight(
 );
 
 aLights[1].sLocationId := cLocationId;
+aLights[1].sLocationName := cLocationName;
 aLights[1].sId := cMainLightId;
+aLights[1].sName := cMainLightName;
 aLights[1].bOn := stOutputs.bLightRelay;
 aLights[2].sLocationId := cLocationId;
+aLights[2].sLocationName := cLocationName;
 aLights[2].sId := cTemporaryLightId;
+aLights[2].sName := cTemporaryLightName;
 aLights[2].bOn := stOutputs.bTemporaryLightRelay;]]></ST>
     </Implementation>
   </POU>

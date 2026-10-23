@@ -2,6 +2,11 @@
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_MqttLightProtocol" Id="{b18f36f3-fcf2-4122-8e1a-67e1d0d90b21}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_MqttLightProtocol
+VAR_INPUT
+    bTestNamespace : BOOL := FALSE;
+    bCatalogReady : BOOL := TRUE;
+    nLightCount : DINT := -1;
+END_VAR
 VAR_OUTPUT
     nCount : UINT;
     nRejectedQueue : UDINT;
@@ -21,6 +26,7 @@ VAR
     nPendingIndex : DINT;
     sPendingTopic : STRING(255);
     bPendingOn : BOOL;
+    fbTopicMap : FB_MqttTopicMap;
 END_VAR]]></Declaration>
     <Implementation><ST><![CDATA[]]></ST></Implementation>
     <Method Name="Reset" Id="{c6b8309b-460b-4f70-b769-36e11ca7be5c}">
@@ -37,6 +43,17 @@ FOR i := 1 TO 16 DO
     aSentValid[i] := FALSE;
 END_FOR]]></ST></Implementation>
     </Method>
+    <Method Name="RequestSnapshot" Id="{e128e520-4cb2-4c8f-91ee-f53ab81f013d}">
+      <Declaration><![CDATA[METHOD PUBLIC RequestSnapshot
+VAR
+    i : UINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[FOR i := 1 TO 16 DO
+    aSentValid[i] := FALSE;
+END_FOR
+bPublishPending := FALSE;
+nPendingIndex := 0;]]></ST></Implementation>
+    </Method>
     <Method Name="SetConnection" Id="{fa095f20-95fd-43e8-8b11-4914a0d583e9}">
       <Declaration><![CDATA[METHOD PUBLIC SetConnection
 VAR_INPUT
@@ -45,19 +62,12 @@ END_VAR
 VAR
     i : UINT;
 END_VAR]]></Declaration>
-      <Implementation><ST><![CDATA[IF bNewReady <> bReady THEN
+      <Implementation><ST><![CDATA[IF (bNewReady <> bReady) OR NOT bNewReady THEN
     nHead := 1;
     nCount := 0;
-    bPublishPending := FALSE;
-    nPendingIndex := 0;
     FOR i := 1 TO 16 DO
         aQueue[i].bValid := FALSE;
     END_FOR
-    IF bNewReady THEN
-        FOR i := 1 TO 16 DO
-            aSentValid[i] := FALSE;
-        END_FOR
-    END_IF
 END_IF
 bReady := bNewReady;]]></ST></Implementation>
     </Method>
@@ -68,11 +78,7 @@ VAR_INPUT
     sLightId : STRING(16);
     sSuffix : STRING(8);
 END_VAR]]></Declaration>
-      <Implementation><ST><![CDATA[BuildTopic := CONCAT('s85/locations/', sLocationId);
-BuildTopic := CONCAT(BuildTopic, '/lights/');
-BuildTopic := CONCAT(BuildTopic, sLightId);
-BuildTopic := CONCAT(BuildTopic, '/');
-BuildTopic := CONCAT(BuildTopic, sSuffix);]]></ST></Implementation>
+      <Implementation><ST><![CDATA[BuildTopic := fbTopicMap.BuildLightTopic(bTestNamespace := bTestNamespace, sLocationId := sLocationId, sLightId := sLightId, sSuffix := sSuffix);]]></ST></Implementation>
     </Method>
     <Method Name="Receive" Id="{7d87b4c7-12e3-47a8-83c4-9e958d73c555}">
       <Declaration><![CDATA[METHOD PUBLIC Receive : BOOL
@@ -86,12 +92,21 @@ VAR_IN_OUT
 END_VAR
 VAR
     i : DINT;
+    nActiveCount : DINT;
     nTail : UINT;
 
     bTargetOn : BOOL;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[Receive := FALSE;
-IF (UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1) > 16 THEN
+IF NOT bCatalogReady THEN
+    nRejectedInput := nRejectedInput + 1;
+    RETURN;
+END_IF
+nActiveCount := nLightCount;
+IF nActiveCount = -1 THEN
+    nActiveCount := UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1;
+END_IF
+IF (nActiveCount < 0) OR (nActiveCount > 16) OR (nActiveCount > UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1) THEN
     nRejectedInput := nRejectedInput + 1;
     RETURN;
 END_IF
@@ -107,7 +122,11 @@ ELSE
     nRejectedInput := nRejectedInput + 1;
     RETURN;
 END_IF
-FOR i := LOWER_BOUND(aLights, 1) TO UPPER_BOUND(aLights, 1) DO
+IF nActiveCount = 0 THEN
+    nRejectedInput := nRejectedInput + 1;
+    RETURN;
+END_IF
+FOR i := LOWER_BOUND(aLights, 1) TO LOWER_BOUND(aLights, 1) + nActiveCount - 1 DO
     IF sTopic = BuildTopic(sLocationId := aLights[i].sLocationId, sLightId := aLights[i].sId, sSuffix := 'set') THEN
         IF nCount >= 16 THEN
             nRejectedQueue := nRejectedQueue + 1;
@@ -150,18 +169,23 @@ END_VAR
 VAR
     i : DINT;
     nSlot : DINT;
+    nActiveCount : DINT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[bPublishPending := FALSE;
 nStateIndex := 0;
 sStateTopic := '';
 sStatePayload := '';
-IF NOT bReady THEN
+IF NOT bCatalogReady THEN
     RETURN;
 END_IF
-IF (UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1) > 16 THEN
+nActiveCount := nLightCount;
+IF nActiveCount = -1 THEN
+    nActiveCount := UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1;
+END_IF
+IF (nActiveCount < 0) OR (nActiveCount > 16) OR (nActiveCount > UPPER_BOUND(aLights, 1) - LOWER_BOUND(aLights, 1) + 1) OR (nActiveCount = 0) THEN
     RETURN;
 END_IF
-FOR i := LOWER_BOUND(aLights, 1) TO UPPER_BOUND(aLights, 1) DO
+FOR i := LOWER_BOUND(aLights, 1) TO LOWER_BOUND(aLights, 1) + nActiveCount - 1 DO
     nSlot := i - LOWER_BOUND(aLights, 1) + 1;
     IF NOT aSentValid[nSlot] OR (aSentTopic[nSlot] <> BuildTopic(sLocationId := aLights[i].sLocationId, sLightId := aLights[i].sId, sSuffix := 'state')) OR (aSentOn[nSlot] <> aLights[i].bOn) THEN
         nStateIndex := i;
