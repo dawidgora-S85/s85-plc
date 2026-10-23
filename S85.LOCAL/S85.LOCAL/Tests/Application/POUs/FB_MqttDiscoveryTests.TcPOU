@@ -16,6 +16,7 @@ ReplayProgressCoalesces();
 ForceReplayInvalidatesObservedDesired();
 Utf8FriendlyNamesAndIdentity();
 AllHomeLightsKeepCentralMetadata();
+LegacyLocalDiscoveryRemainsUnsettled();
 Utf8MalformedNamesFailClosed();
 JsonEscapingAndMetadataBounds();
 InvalidCatalogsFailClosed();
@@ -450,10 +451,15 @@ VAR_INST
     fbLocal : S85Core.FB_MqttDiscovery;
     fbProd : S85Core.FB_MqttDiscovery;
     fbHome : S85Core.FB_Home;
+    fbMap : S85Core.FB_MqttTopicMap;
 END_VAR
 VAR
     stInputs : S85Core.ST_HomeInputs;
     a : ARRAY[1..6] OF ST_LightInfo;
+    sIdentity : STRING(128);
+    sExpected : STRING(255);
+    {attribute 'TcEncoding' := 'UTF-8'}
+    sDeviceName : STRING(255);
     i : INT;
 END_VAR]]></Declaration>
       <Implementation><ST><![CDATA[TEST('All six home lights share discovery metadata and preserve namespaces');
@@ -464,15 +470,78 @@ fbLocal.bTestNamespace := TRUE; fbProd.bTestNamespace := FALSE;
 FOR i := 1 TO 6 DO
     fbLocal.Plan(aLights := a); fbProd.Plan(aLights := a);
     AssertTrue(Condition := fbLocal.bValid AND fbLocal.bPublishPending AND fbProd.bValid AND fbProd.bPublishPending, Message := 'Home light is admitted in both complete catalogs');
+    sIdentity := fbMap.BuildIdentity(bTestNamespace := TRUE, sLocationId := a[i].sLocationId, sLightId := a[i].sId);
+    AssertTrue(Condition := fbLocal.sTopic = fbMap.BuildDiscoveryTopic(bTestNamespace := TRUE, sObjectId := sIdentity), Message := 'LOCAL discovery topic matches exact mapped identity');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := CONCAT(CONCAT('"unique_id":"', sIdentity), '"')) > 0 AND PayloadFind(sValue := fbLocal.sPayload, sNeedle := CONCAT(CONCAT('"ids":["', sIdentity), '"]')) > 0, Message := 'LOCAL component and device identities exactly match catalog identity');
+    sIdentity := fbMap.BuildIdentity(bTestNamespace := FALSE, sLocationId := a[i].sLocationId, sLightId := a[i].sId);
+    AssertTrue(Condition := fbProd.sTopic = fbMap.BuildDiscoveryTopic(bTestNamespace := FALSE, sObjectId := sIdentity), Message := 'PROD discovery topic matches exact mapped identity');
+    AssertTrue(Condition := PayloadFind(sValue := fbProd.sPayload, sNeedle := CONCAT(CONCAT('"unique_id":"', sIdentity), '"')) > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := CONCAT(CONCAT('"ids":["', sIdentity), '"]')) > 0, Message := 'PROD component and device identities exactly match catalog identity');
+    sExpected := fbMap.BuildLightTopic(bTestNamespace := TRUE, sLocationId := a[i].sLocationId, sLightId := a[i].sId, sSuffix := 'set');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := CONCAT(CONCAT('"command_topic":"', sExpected), '"')) > 0, Message := 'LOCAL command topic matches exact mapped catalog topic');
+    sExpected := fbMap.BuildLightTopic(bTestNamespace := TRUE, sLocationId := a[i].sLocationId, sLightId := a[i].sId, sSuffix := 'state');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := CONCAT(CONCAT('"state_topic":"', sExpected), '"')) > 0, Message := 'LOCAL state topic matches exact mapped catalog topic');
+    sExpected := fbMap.BuildLightTopic(bTestNamespace := FALSE, sLocationId := a[i].sLocationId, sLightId := a[i].sId, sSuffix := 'set');
+    AssertTrue(Condition := PayloadFind(sValue := fbProd.sPayload, sNeedle := CONCAT(CONCAT('"command_topic":"', sExpected), '"')) > 0, Message := 'PROD command topic matches exact mapped catalog topic');
+    sExpected := fbMap.BuildLightTopic(bTestNamespace := FALSE, sLocationId := a[i].sLocationId, sLightId := a[i].sId, sSuffix := 'state');
+    AssertTrue(Condition := PayloadFind(sValue := fbProd.sPayload, sNeedle := CONCAT(CONCAT('"state_topic":"', sExpected), '"')) > 0, Message := 'PROD state topic matches exact mapped catalog topic');
+    sDeviceName := CONCAT(CONCAT(a[i].sLocationName, ' - '), a[i].sName);
+    AssertTrue(Condition := PayloadFind(sValue := fbProd.sPayload, sNeedle := CONCAT(CONCAT('"name":"', sDeviceName), '"')) > 0, Message := 'PROD full UTF-8 friendly device name matches catalog');
+    sDeviceName := CONCAT('TEST: ', sDeviceName);
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := CONCAT(CONCAT('"name":"', sDeviceName), '"')) > 0, Message := 'LOCAL full UTF-8 friendly device name matches catalog with test prefix');
     AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"mf":"S85","mdl":"PLC Light"') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := '"mf":"S85","mdl":"PLC Light"') > 0, Message := 'Manufacturer and model are shared across all six lights and namespaces');
     AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"name":null') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := '"name":null') > 0, Message := 'Both discovery payloads keep component name null');
     AssertTrue(Condition := PayloadFind(sValue := fbLocal.sTopic, sNeedle := 'homeassistant/device/s85_test/') > 0 AND PayloadFind(sValue := fbLocal.sPayload, sNeedle := 'TEST: ') > 0, Message := 'LOCAL uses test topic and device prefix');
     AssertTrue(Condition := PayloadFind(sValue := fbProd.sTopic, sNeedle := 'homeassistant/device/s85/') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := 'TEST:') = 0, Message := 'PROD uses production topic with no test prefix');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"p":"light","unique_id":"') > 0 AND PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"vis":false,"optimistic":false') > 0, Message := 'LOCAL visibility metadata is inside the light component');
+    AssertFalse(Condition := PayloadFind(sValue := fbProd.sPayload, sNeedle := '"vis"') > 0 OR PayloadFind(sValue := fbProd.sPayload, sNeedle := '"visible_by_default"') > 0, Message := 'PROD omits visibility metadata');
+    AssertTrue(Condition := (PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"vis"') > PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"cmps":{"light":{')) AND (PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"vis"') < PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"command_topic"')) AND (PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"dev":{"ids"') < PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"vis"')), Message := 'Visibility key appears only within cmps.light and not device metadata');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"availability":[{"topic":"s85/test/availability"}') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := '"availability":[{"topic":"s85/locations/availability"}') > 0, Message := 'Availability topics stay namespace-correct');
+    AssertTrue(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"ids":["s85_test_') > 0 AND PayloadFind(sValue := fbProd.sPayload, sNeedle := '"ids":["s85_') > 0, Message := 'Both device identities remain namespace-specific and stable');
+    AssertFalse(Condition := PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"enabled_by_default"') > 0 OR PayloadFind(sValue := fbProd.sPayload, sNeedle := '"enabled_by_default"') > 0 OR PayloadFind(sValue := fbLocal.sPayload, sNeedle := '"en"') > 0 OR PayloadFind(sValue := fbProd.sPayload, sNeedle := '"en"') > 0, Message := 'No enabled-by-default or abbreviated enabled field is emitted');
+    AssertTrue(Condition := PayloadByteLength(sValue := fbLocal.sPayload) > 255 AND PayloadByteLength(sValue := fbLocal.sPayload) < SIZEOF(fbLocal.sPayload) AND PayloadByteLength(sValue := fbProd.sPayload) > 255 AND PayloadByteLength(sValue := fbProd.sPayload) < SIZEOF(fbProd.sPayload), Message := 'Both complete payload byte lengths remain within full-buffer bounds');
     fbLocal.Observe(sObservedTopic := fbLocal.sTopic, pObservedPayload := ADR(fbLocal.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fbLocal.sPayload));
     fbProd.Observe(sObservedTopic := fbProd.sTopic, pObservedPayload := ADR(fbProd.sPayload), nObservedPayloadSize := PayloadByteLength(sValue := fbProd.sPayload));
 END_FOR
 fbLocal.Plan(aLights := a); fbProd.Plan(aLights := a);
 AssertTrue(Condition := fbLocal.bReady AND fbProd.bReady, Message := 'All six exact observations settle in both namespaces');
+TEST_FINISHED();]]></ST></Implementation>
+    </Method>
+    <Method Name="LegacyLocalDiscoveryRemainsUnsettled" Id="{aa90d9b9-32e4-4b39-98f7-4d84c9a6ad27}">
+      <Declaration><![CDATA[METHOD PRIVATE LegacyLocalDiscoveryRemainsUnsettled
+VAR_INST
+    fb : S85Core.FB_MqttDiscovery;
+END_VAR
+VAR
+    a : ARRAY[1..1] OF ST_LightInfo;
+    sTopic : STRING(255);
+    sCurrent : STRING(2047);
+    sLegacy : STRING(2047);
+    nStart : DINT;
+    nLength : UDINT;
+    i : UDINT;
+END_VAR]]></Declaration>
+      <Implementation><ST><![CDATA[TEST('Legacy LOCAL payload is pending until fresh exact echo');
+IF TcUnit.IS_TEST_FINISHED('Legacy LOCAL payload is pending until fresh exact echo') THEN RETURN; END_IF
+a[1].sLocationId := 'H.01-09'; a[1].sLocationName := 'Workshop'; a[1].sId := 'main'; a[1].sName := 'Ceiling';
+fb.bTestNamespace := TRUE; fb.Plan(aLights := a); sTopic := fb.sTopic; sCurrent := fb.sPayload;
+nStart := PayloadFind(sValue := sCurrent, sNeedle := ',"vis":false');
+nLength := PayloadByteLength(sValue := sCurrent); sLegacy := '';
+AssertTrue(Condition := (nStart > 0) AND (nLength > 255), Message := 'Current payload has visibility field and exercises full-buffer handling');
+IF (nStart > 0) AND (nLength > 255) THEN
+    FOR i := 0 TO DINT_TO_UDINT(nStart - 2) DO sLegacy[i] := sCurrent[i]; END_FOR
+    FOR i := DINT_TO_UDINT(nStart - 1) + 12 TO nLength - 1 DO sLegacy[i - 12] := sCurrent[i]; END_FOR
+    sLegacy[nLength - 12] := 0;
+END_IF
+AssertTrue(Condition := PayloadByteLength(sValue := sLegacy) = nLength - 12, Message := 'Legacy payload removes only visibility bytes without truncation');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sLegacy), nObservedPayloadSize := PayloadByteLength(sValue := sLegacy)); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady, Message := 'Legacy retained payload remains pending and not ready');
+AssertFalse(Condition := fb.bPublishPending, Message := 'Legacy observation preserves the initial retry backoff');
+fb.nNowMs := 1000; fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bPublishPending AND fb.sTopic = sTopic AND fb.sPayload = sCurrent, Message := 'Legacy observation schedules current config on stable topic after backoff');
+fb.ConfirmPublish(bAccepted := TRUE); fb.Plan(aLights := a);
+AssertFalse(Condition := fb.bReady OR fb.bPublishPending, Message := 'Accepted publication does not settle without exact echo');
+fb.Observe(sObservedTopic := sTopic, pObservedPayload := ADR(sCurrent), nObservedPayloadSize := PayloadByteLength(sValue := sCurrent)); fb.Plan(aLights := a);
+AssertTrue(Condition := fb.bReady AND NOT fb.bPublishPending, Message := 'Fresh exact new payload echo settles update');
 TEST_FINISHED();]]></ST></Implementation>
     </Method>
     <Method Name="Utf8MalformedNamesFailClosed" Id="{1a450b36-e69b-493d-a006-388b91774276}">

@@ -297,7 +297,11 @@ IF NOT Append(sTarget := sPayload, sFragment := '},"o":{"name":"S85","sw":"1"},"
 IF NOT Append(sTarget := sPayload, sFragment := sAvailability) THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := '"}],"cmps":{"light":{"p":"light","unique_id":"') THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := sIdentity) THEN RETURN; END_IF
-IF NOT Append(sTarget := sPayload, sFragment := '","name":null,"optimistic":false,"retain":false,"qos":1,"command_topic":"') THEN RETURN; END_IF
+IF NOT Append(sTarget := sPayload, sFragment := '","name":null') THEN RETURN; END_IF
+IF bTestNamespace THEN
+    IF NOT Append(sTarget := sPayload, sFragment := ',"vis":false') THEN RETURN; END_IF
+END_IF
+IF NOT Append(sTarget := sPayload, sFragment := ',"optimistic":false,"retain":false,"qos":1,"command_topic":"') THEN RETURN; END_IF
 sTopic := fbTopicMap.BuildLightTopic(bTestNamespace := bTestNamespace, sLocationId := stLight.sLocationId, sLightId := stLight.sId, sSuffix := 'set');
 IF NOT Append(sTarget := sPayload, sFragment := sTopic) THEN RETURN; END_IF
 IF NOT Append(sTarget := sPayload, sFragment := '","state_topic":"') THEN RETURN; END_IF
