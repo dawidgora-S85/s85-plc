@@ -9,6 +9,7 @@ For LOCAL runtime setup and test results, read [LOCAL runtime and tests](worksho
 - `S85.sln` contains the PROD system, LOCAL system and shared Core library.
 - `S85.PROD/S85.PROD.tsproj` is the production system project.
 - It uses `S85.PROD/S85/S85_PROD.plcproj`, PLC application `S85_PROD` and instance `S85_PROD Instance`.
+- Its generated TMC is `S85.PROD/S85/S85_PROD.tmc`.
 - `S85.LOCAL/S85.LOCAL.tsproj` is the local system project.
 - It uses `S85.LOCAL/S85.LOCAL/S85_LOCAL.plcproj`, PLC application `S85_LOCAL` and instance `S85_LOCAL Instance`.
 - Both applications use the library in `S85.Core/S85_Core.plcproj` through `S85.Core/S85.Core.tspproj`.
@@ -17,7 +18,7 @@ For LOCAL runtime setup and test results, read [LOCAL runtime and tests](worksho
 ## PLC application layout
 
 - The physical project roots are `S85.Core/`, `S85.LOCAL/S85.LOCAL/` and `S85.PROD/S85/`.
-- Core's `Application` folder contains the home application DUTs and POUs. `Locations/Workshop` and `Locations/Entryway` each contain their DUTs and POUs.
+- Core's `Application` folder contains the home application DUTs and POUs. `Locations/Workshop`, `Locations/Entryway` and `Locations/Hall` each contain their DUTs and POUs.
 - `Domains/Lighting` contains neutral shared light behavior (`FB_ButtonLight`). Workshop, Entryway and Hall composition remains in their location adapters.
 - LOCAL uses x64, with simulation under `Infrastructure/IO/Simulation/{POUs,GVLs}` and tests under `Tests`.
 - PROD uses ARMv8 and physical Beckhoff I/O under `Infrastructure/IO/Beckhoff/{POUs,GVLs}`.

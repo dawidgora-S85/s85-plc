@@ -1,6 +1,6 @@
 # Workshop setup and checks
 
-The production application uses hardware inputs and outputs for the Workshop and Entryway.
+The production application uses hardware inputs and outputs for the Workshop, Entryway and Hall.
 The LOCAL application provides simulation and TcUnit tests.
 
 ## Project split
@@ -15,11 +15,8 @@ The LOCAL application provides simulation and TcUnit tests.
 
 ## Scoped builds and tests
 
-- Build PROD with `Release | TwinCAT OS (ARMV8-A)`.
-- Build LOCAL with the existing `Release | TwinCAT OS (x64)` configuration.
-- Select only the required system project root in Solution Explorer.
-- Use `Build.RebuildSelection` for a native scoped clean rebuild.
-- Do not build the whole solution to verify PROD or LOCAL.
+Follow the [TwinCAT XAE workflow](twincat-xae.md) for scoped clean rebuilds, configurations and required evidence.
+
 - Run simulation and TcUnit tests only in LOCAL, never on the production CX.
 - Do not add PROD compiler defines to switch hardware or simulation behavior.
 
@@ -142,15 +139,18 @@ All mappings are stored in `S85.PROD/S85.PROD.tsproj`.
 At startup, all relay commands are OFF.
 The application ignores each button already reading TRUE until that button is released and pressed again.
 The Entryway lower button and Hall lower button toggle the Entryway main light relay; simultaneous new presses cause one toggle.
-If both are newly pressed in the same scan, they cause one toggle.
+Core passes the Hall lower input to `FB_Location_Entryway.bHallLowerButton`; the hardware and simulation GVL names remain unchanged.
 The Entryway upper button toggles the temporary light relay.
 The Hall upper button turns both spot relays OFF if either is ON. Otherwise, it turns both ON.
+The spot outputs have independent states. Hall `main` represents their group, with state ON when either member is ON.
+See [MQTT light integration](mqtt-light.md) for group and individual commands.
 The Workshop button toggles its own light relay.
 Holding or releasing a button does not toggle a relay.
 
 ## Verification
 
 Use the [TwinCAT XAE workflow](twincat-xae.md) for solution paths, scoped rebuilds and toolchain limits.
+The behavior above describes source implementation, not a current build, test or deployment result.
 
 Build PROD and LOCAL separately when a change affects both systems.
 Run TcUnit only through the LOCAL test project and its isolated test runtime.

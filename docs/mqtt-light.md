@@ -36,7 +36,7 @@ The catalog has six logical MQTT lights. The three existing lights keep their ID
 
 Hall `main` is a group light, not an independent latch. Its SET command applies the requested absolute state to both spot lights. Its STATE is ON when either member is ON. Commands to `outer_spots` and `middle_spot` affect only that member. The physical Hall upper button turns both spots OFF if either is ON; otherwise it turns both ON. The lower button keeps its existing Entryway main-light behavior.
 
-Discovery uses one Home Assistant device per logical light. The device name joins its location and light names with ` - `. Names use UTF-8 and are each limited to 64 bytes. Their combined name is limited to 137 bytes, including the separator and the LOCAL `TEST: ` prefix. PROD has no prefix. The light component uses `name: null`, so its entity inherits the device name. Each device declares `dev`, `o`, and `cmps` in its device-discovery payload. The shared manufacturer is `S85` and model is `PLC Light`. See [Home Assistant MQTT device discovery](https://www.home-assistant.io/integrations/mqtt/#device-discovery) and [MQTT light](https://www.home-assistant.io/integrations/mqtt/#light).
+Discovery uses one Home Assistant device per logical light. The device name joins its location and light names with ` - `. Names use UTF-8 and are each limited to 64 bytes. Their combined name is limited to 137 bytes, including the separator and the LOCAL `TEST: ` prefix. PROD has no prefix. The light component uses `name: null`, so its entity inherits the device name. Each device declares `dev`, `o`, and `cmps` in its device-discovery payload. The shared manufacturer is `S85` and model is `PLC Light`. See [Home Assistant MQTT device discovery](https://www.home-assistant.io/integrations/mqtt/#device-discovery-payload) and [MQTT light](https://www.home-assistant.io/integrations/light.mqtt/).
 
 Friendly location names are `Warsztat`, `Wiatrołap`, and `Hol`. Light names are `Oświetlenie główne`, `Oświetlenie tymczasowe`, `Oświetlenie`, `Spoty zewnętrzne`, and `Spot środkowy`, as applicable. Discovery text uses UTF-8 `STRING` literals. Validation checks UTF-8 strictly. Serialization escapes JSON text. The discovery payload limit remains 2047 bytes.
 
@@ -122,8 +122,10 @@ The loader fails closed if it cannot read or parse either file. `MAIN.nMqttConfi
 
 ## Verification and authorization
 
-Build only affected projects using native `Build.RebuildSelection`: LOCAL with `Release | TwinCAT OS (x64)` and PROD with `Release | TwinCAT OS (ARMV8-A)`. Rebuilds are offline checks and do not prove runtime or broker behavior.
+Follow the [TwinCAT XAE workflow](twincat-xae.md) for scoped rebuilds and configurations. Rebuilds are offline checks and do not prove runtime or broker behavior.
 
 Run simulation and TcUnit only in the authorized LOCAL session. Follow [Workshop setup and checks](workshop-light.md) for target checks and online authorization.
+
+Every LOCAL or PROD online operation requires separate user authorization for the target and action. This includes Login, Download, Start, Stop, Logout and online reads.
 
 No Home Assistant OS, Mosquitto, production broker, or PROD runtime changes are authorized by this document. Any platform or runtime operation requires separate user authorization for the target and action. Never deploy automatically to PROD.
