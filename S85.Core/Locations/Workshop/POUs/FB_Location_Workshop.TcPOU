@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_Location_Workshop" Id="{ed6140a9-7ba0-4913-8278-e47fbcd68c6d}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Workshop
@@ -16,7 +16,7 @@ VAR CONSTANT
     cLocationId : STRING(16) := 'H.01-09';
     cLocationName : STRING(64) := 'Workshop';
     cMainLightId : STRING(16) := 'main';
-    cMainLightName : STRING(64) := 'Main light';
+    cMainLightName : STRING(64) := 'Ceiling';
 END_VAR
 
 VAR

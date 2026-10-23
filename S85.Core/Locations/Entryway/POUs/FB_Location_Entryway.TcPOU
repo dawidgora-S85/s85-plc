@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_Location_Entryway" Id="{f7521329-8123-44c1-8539-6a0ef925431d}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Location_Entryway

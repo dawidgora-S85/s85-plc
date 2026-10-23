@@ -27,7 +27,7 @@
 		</System>
 		<Plc>
 			<Project GUID="{846DEC26-C073-4019-A3B8-1A7C3374AE79}" Name="S85_PROD" PrjFilePath="S85\S85_PROD.plcproj" TmcFilePath="S85\S85_PROD.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{E7C3AB44-1D10-046B-B360-B2BF6A960805}" TmcPath="S85\S85_PROD.tmc">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcHash="{1748CEB8-053A-3317-46FF-561F29E447D5}" TmcPath="S85\S85_PROD.tmc">
 					<Name>S85_PROD Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Vars VarGrpType="2" AreaNo="1">
